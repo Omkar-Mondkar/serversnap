@@ -461,6 +461,24 @@ def store_push(data_dir: str, server_id: str, payload: Dict[str, Any]) -> None:
     history_file = os.path.join(history_dir, f"{ts}_{server_id}.json")
     _atomic_write_json(history_file, storage_payload)
 
+    # Record initial baseline auto-approval if audit history is empty
+    audit_history_path = os.path.join(server_dir, "audit_history.json")
+    if not os.path.isfile(audit_history_path) or os.path.getsize(audit_history_path) == 0:
+        snap = payload.get("snapshot", {})
+        gen_at = ""
+        if isinstance(snap, dict):
+            gen_at = snap.get("snapshot_at") or snap.get("generated_at") or ""
+        ts_clean = gen_at.replace(":", "_").replace("-", "_") if gen_at else ts
+        snap_id = f"snapshot_{server_id}_{ts_clean}.json"
+        init_record = [{
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "action": "APPROVED",
+            "snapshot_id": snap_id,
+            "user": "system (initial baseline)",
+            "reason": "Auto-approved initial baseline",
+        }]
+        _atomic_write_json(audit_history_path, init_record)
+
 
 
 
@@ -1521,10 +1539,9 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
                 history = []
             history.append(record)
             _atomic_write_json(history_path, history)
-		    
-        self._send_json({"success": True, "history": history})
+            self._send_json({"success": True, "history": history})
         except (OSError, ValueError, json.JSONDecodeError) as exc:
-                self._send_json({"error": str(exc)}, 400)
+            self._send_json({"error": str(exc)}, 400)
 
 
 

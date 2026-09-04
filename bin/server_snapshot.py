@@ -2092,17 +2092,6 @@ def main(argv: Optional[List[str]] = None) -> int:
         log.error("Could not create snapshot/report directories: %s", exc)
         return 2
 
-
-
-
-
-
-
-
-
-
-
-
     baseline_path = os.path.join(
         os.path.dirname(config.snapshot_dir), "baseline", f"baseline_{config.server_id}.json"
     )
@@ -2116,27 +2105,13 @@ def main(argv: Optional[List[str]] = None) -> int:
         except (OSError, json.JSONDecodeError) as exc:
             log.warning("Could not load approved baseline %s: %s", previous_snapshot_path, exc)
     else:
-        log.info("No approved baseline found; the first snapshot requires approval.")
-
-
-
-
-
-
-
+        log.info("No approved baseline found; this initial snapshot will be auto-approved as the baseline.")
 
     try:
         new_snapshot = build_snapshot(config)
     except Exception as exc:  # noqa: BLE001 - top-level guard, must never crash unlogged
         log.exception("Fatal error while building snapshot: %s", exc)
         return 2
-
-
-
-
-
-
-
 
     try:
         new_snapshot_path = save_snapshot(new_snapshot, config.snapshot_dir)
@@ -2145,23 +2120,28 @@ def main(argv: Optional[List[str]] = None) -> int:
         log.error("Could not save snapshot: %s", exc)
         return 2
 
-
-
-
-
-
-
+    is_initial_baseline = previous_snapshot is None
+    if is_initial_baseline:
+        baseline_dir = os.path.dirname(baseline_path)
+        try:
+            os.makedirs(baseline_dir, exist_ok=True)
+            _secure_dir(baseline_dir)
+            from audit_store import AuditStore  # type: ignore
+            audit_store = AuditStore(config.snapshot_dir, config.server_id)
+            audit_store.promote(new_snapshot_path)
+            audit_store.append("APPROVED", new_snapshot_path, "system (initial baseline)", "Auto-approved initial baseline")
+            log.info("Auto-approved initial snapshot as baseline: %s", baseline_path)
+        except Exception as exc:
+            log.warning("Could not record initial baseline in audit store: %s", exc)
+            try:
+                _atomic_write(baseline_path, json.dumps(new_snapshot, indent=2, sort_keys=True))
+                log.info("Saved initial baseline directly: %s", baseline_path)
+            except OSError as b_exc:
+                log.warning("Could not write baseline file: %s", b_exc)
 
     diff = compare_snapshots(previous_snapshot, new_snapshot)
     report = build_report(new_snapshot, previous_snapshot_path, new_snapshot_path, diff)
     text_report = render_text_report(report)
-
-
-
-
-
-
-
 
     try:
         json_report_path, text_report_path = save_report(report, text_report, config.report_dir, config.server_id)
@@ -2170,16 +2150,34 @@ def main(argv: Optional[List[str]] = None) -> int:
         log.error("Could not save report: %s", exc)
         return 2
 
+    if is_initial_baseline:
+        try:
+            from report_approval_store import ReportApprovalStore  # type: ignore
+            approvals_dir = os.path.join(os.path.dirname(config.snapshot_dir), "approvals")
+            rep_store = ReportApprovalStore(config.server_id, approvals_dir)
+            rep_basename = os.path.basename(json_report_path)
+            rep_store.set_pending(rep_basename, rep_basename, len(diff["added"]), 0)
+            rep_store.approve(rep_basename, "Auto-approved initial baseline")
+        except Exception:
+            pass
+        try:
+            from baseline_manager import BaselineManager  # type: ignore
+            baselines_dir = os.path.join(os.path.dirname(config.snapshot_dir), "baselines")
+            os.makedirs(baselines_dir, exist_ok=True)
+            mgr = BaselineManager(config.server_id, baselines_dir)
+            mgr.save_golden_snapshot(report, "Initial Baseline")
+        except Exception:
+            pass
 
     prune_old_files(config.snapshot_dir, f"snapshot_{config.server_id}_*.json", config.retention_count)
     prune_old_files(config.report_dir, f"report_{config.server_id}_*.json", config.retention_count)
     prune_old_files(config.report_dir, f"report_{config.server_id}_*.txt", config.retention_count)
 
-
-
-
-    has_changes = bool(report["summary"]["added"] or report["summary"]["deleted"] or report["summary"]["modified"])
-
+    if is_initial_baseline:
+        has_changes = False
+        log.info("Initial snapshot auto-approved as baseline (%d entries).", new_snapshot["entry_count"])
+    else:
+        has_changes = bool(report["summary"]["added"] or report["summary"]["deleted"] or report["summary"]["modified"])
 
     if has_changes:
         log.warning(
@@ -2188,7 +2186,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         )
         if not args.no_alert:
             send_alerts(config, report, json_report_path, text_report_path)
-    else:
+    elif not is_initial_baseline:
         log.info("No changes detected.")
 
 

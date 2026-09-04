@@ -1,0 +1,5 @@
+.agent
+openspec/
+bin/__pycache__
+
+# Agent Push → Central Server Core → Storage → Auth → UI → Samples → Validation

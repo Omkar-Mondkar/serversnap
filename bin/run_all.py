@@ -501,30 +501,56 @@ Examples:
            
             # Initialize baselines if they don't exist
             baselines = baseline_mgr.get_all_baselines()
+            _snap_dir = config.get("snapshot_dir", str(project_root / "snapshots"))
+            _snaps = sorted(glob.glob(os.path.join(_snap_dir, f"snapshot_{server_id}_*.json")))
+            drift_snap_data = {}
+            if _snaps:
+                try:
+                    with open(_snaps[-1], "r", encoding="utf-8") as _sf:
+                        drift_snap_data = json.load(_sf).get("entries", {})
+                except Exception:
+                    drift_snap_data = {}
+
+            app_snap_data = {}
+            network_snap_data = {}
+            try:
+                sys.path.insert(0, str(script_dir))
+                from visualize_report import analyze_configured_paths, load_yaml_snapshot, parse_network_settings  # type: ignore
+                if app_dir:
+                    app_snap_data = analyze_configured_paths(config_file)
+                if network_snapshot_yaml.exists() and not skip_network:
+                    network_snap_data = parse_network_settings(load_yaml_snapshot(str(network_snapshot_yaml)))
+            except Exception:
+                pass
+
             if not baselines:
                 print_info("No baselines found - initializing with current snapshots...")
                 baseline_mgr.initialize_all_baselines({
-                    "drift": {"initialized": True},
-                    "app": {"initialized": True},
-                    "network": {"initialized": True}
+                    "drift": drift_snap_data,
+                    "app": app_snap_data,
+                    "network": network_snap_data,
                 })
                 print_success("Initial baselines created (approved)")
             else:
                 # Check for changes
                 changes_detected = False
-                pending_approvals = approver.get_pending_changes()
-               
+                category_data = {
+                    "drift": drift_snap_data,
+                    "app": app_snap_data,
+                    "network": network_snap_data,
+                }
                 for category in ["drift", "app", "network"]:
                     baseline = baseline_mgr.load_baseline(category)
-                    has_changes, diff = baseline_mgr.compare_with_baseline(
-                        category,
-                        {"current": datetime.now().isoformat()}
-                    )
-                   
-                    if has_changes and baseline:
-                        changes_detected = True
-                        approver.record_pending_changes(category, diff, datetime.now().isoformat())
-                        print_info(f"⏳ Changes detected in {category} - pending approval")
+                    data_to_check = category_data.get(category, {})
+                    if baseline and data_to_check:
+                        has_changes, diff = baseline_mgr.compare_with_baseline(
+                            category,
+                            data_to_check
+                        )
+                        if has_changes:
+                            changes_detected = True
+                            approver.record_pending_changes(category, diff, datetime.now().isoformat())
+                            print_info(f"⏳ Changes detected in {category} - pending approval")
                
                 if changes_detected:
                     print_info("\n📋 PENDING APPROVALS:")

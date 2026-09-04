@@ -483,28 +483,55 @@ def _compute_threshold_data(
 
 
         # Register in store
-        if store and basename:
-            try:
-                # If this is the initial baseline run, auto-approve it
-                if is_baseline:
+        if is_baseline:
+            # Baseline reports are always auto-approved and never exceed change threshold
+            if store and basename:
+                try:
                     store.set_pending(basename, label, change_count, threshold)
-                    store._save({**store._load(), basename: {**store._load().get(basename, {}), "status": "approved"}})
-                else:
+                    store.approve(basename, "Auto-approved initial baseline")
+                except Exception:  # noqa: BLE001
+                    pass
+            status = "approved"
+            exceeded = False
+
+            # Ensure AuditStore and BaselineManager reflect the auto-approved initial baseline
+            if approvals_dir:
+                try:
+                    root_dir = os.path.dirname(os.path.abspath(approvals_dir))
+                    from audit_store import AuditStore  # type: ignore
+                    snap_dir = os.path.join(root_dir, "snapshots")
+                    audit_store = AuditStore(snap_dir, server_id)
+                    curr_snap = report.get("current_snapshot", "")
+                    if curr_snap and not any(r.get("snapshot_id") == os.path.basename(curr_snap) for r in audit_store.history()):
+                        if os.path.isfile(curr_snap):
+                            audit_store.promote(curr_snap)
+                        audit_store.append("APPROVED", curr_snap, "system (initial baseline)", "Auto-approved initial baseline")
+                except Exception:  # noqa: BLE001
+                    pass
+                try:
+                    from baseline_manager import BaselineManager  # type: ignore
+                    baselines_dir = os.path.join(root_dir, "baselines")
+                    os.makedirs(baselines_dir, exist_ok=True)
+                    BaselineManager(server_id, baselines_dir).save_golden_snapshot(report, label)
+                except Exception:  # noqa: BLE001
+                    pass
+        else:
+            if store and basename:
+                try:
                     store.set_pending(basename, label, change_count, threshold)
-            except Exception:  # noqa: BLE001
-                pass
+                except Exception:  # noqa: BLE001
+                    pass
 
-
-        # Fetch persisted status (may differ from 'pending' if decided earlier)
-        status = "pending"
-        if store and basename:
-            try:
-                rec = store.get_record(basename)
-                if rec:
-                    status = rec.get("status", "pending")
-                    exceeded = rec.get("threshold_exceeded", exceeded)
-            except Exception:  # noqa: BLE001
-                pass
+            # Fetch persisted status (may differ from 'pending' if decided earlier)
+            status = "pending"
+            if store and basename:
+                try:
+                    rec = store.get_record(basename)
+                    if rec:
+                        status = rec.get("status", "pending")
+                        exceeded = rec.get("threshold_exceeded", exceeded)
+                except Exception:  # noqa: BLE001
+                    pass
 
 
         if basename:

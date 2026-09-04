@@ -374,8 +374,9 @@
       var basename = entry.file
         ? entry.file.split("/").pop().split("\\").pop()
         : "";
+      var isBase = !(entry.data && entry.data.previous_snapshot);
       var rMeta = (thresholdData.reports || {})[basename];
-      if (rMeta && rMeta.threshold_exceeded && rMeta.status === "pending") {
+      if (rMeta && !isBase && rMeta.threshold_exceeded && rMeta.status === "pending") {
         pendingExceeded.push(rMeta.report_label);
       }
     });
@@ -1108,6 +1109,7 @@
           .find(function (record) {
             return record.snapshot_id === snapshot;
           });
+        var isBaseline = !report.previous_snapshot;
         var decisionPanel = "";
         if (decision) {
           var isApproved =
@@ -1138,6 +1140,20 @@
             '<div class="audit-decision-reason"><span class="audit-reason-label">Reason / Note:</span> ' +
             esc(decision.reason) +
             "</div>" +
+            "</div>" +
+            "</section>";
+        } else if (isBaseline) {
+          decisionPanel =
+            '<section class="panel audit-panel">' +
+            '<h2 class="panel-title"><span class="panel-dot dot-added"></span>Baseline Decision Recorded</h2>' +
+            '<div class="audit-body">' +
+            '<div class="audit-decision-row">' +
+            '<span class="status-pill approved">&#10003; APPROVED</span>' +
+            '<span class="audit-decision-meta">by <strong>system (initial baseline)</strong>' +
+            (report.generated_at ? " &bull; " + esc(formatDate(report.generated_at)) : "") +
+            "</span>" +
+            "</div>" +
+            '<div class="audit-decision-reason"><span class="audit-reason-label">Reason / Note:</span> Auto-approved initial baseline</div>' +
             "</div>" +
             "</section>";
         } else {
@@ -1175,7 +1191,7 @@
           history +
           "</tbody></table></div>" +
           "</section>";
-        if (!decision) {
+        if (!decision && !isBaseline) {
           q("approveDriftSnapshotBtn").addEventListener("click", function () {
             decideSnapshot("approve", snapshot);
           });
