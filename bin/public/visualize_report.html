@@ -1,0 +1,811 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>__TITLE__</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <style></style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-row1">
+        <div class="topbar-left">
+          <div class="logo">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <rect x="2" y="3" width="20" height="14" rx="2" />
+              <line x1="8" y1="21" x2="16" y2="21" />
+              <line x1="12" y1="17" x2="12" y2="21" />
+            </svg>
+          </div>
+          <div class="titles">
+            <h1>ServerSnap</h1>
+            <p id="subtitle" class="subtitle">—</p>
+          </div>
+        </div>
+        <div class="topbar-right">
+          <div class="field multi-select-field">
+            <label>Reports</label>
+            <div class="multi-select" id="reportMultiSelect">
+              <div class="multi-select-trigger" id="reportTrigger" tabindex="0">
+                <span id="reportSelectedText">Select reports…</span
+                ><span class="ms-chevron"
+                  ><svg viewBox="0 0 12 12" fill="currentColor">
+                    <path d="M2 4l4 4 4-4" /></svg
+                ></span>
+              </div>
+              <div class="multi-select-dropdown" id="reportDropdown">
+                <div class="ms-actions">
+                  <button type="button" id="selectAll" class="ms-btn">
+                    Select All</button
+                  ><button type="button" id="deselectAll" class="ms-btn">
+                    Clear
+                  </button>
+                </div>
+                <div id="reportCheckboxes" class="ms-options"></div>
+              </div>
+            </div>
+          </div>
+          <label
+            class="compare-toggle"
+            title="Select two or more reports to compare their displayed drift"
+            ><input id="compareReportsToggle" type="checkbox" /> Compare reports
+          </label>
+          <div class="field search-field" id="searchFieldWrap">
+            <label for="searchBox">Filter</label
+            ><input
+              id="searchBox"
+              type="text"
+              placeholder="path, filename…"
+              autocomplete="off"
+            />
+          </div>
+          <button id="themeToggle" class="icon-btn" title="Toggle theme">
+            <svg id="iconDark" viewBox="0 0 20 20" fill="currentColor">
+              <path
+                d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"
+              /></svg
+            ><svg
+              id="iconLight"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              style="display: none"
+            >
+              <path
+                fill-rule="evenodd"
+                d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"
+                clip-rule="evenodd"
+              />
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="topbar-row2">
+        <nav class="tab-nav" id="tabNav">
+          <button class="tab-btn active" data-tab="reports" id="tab-reports">
+            <svg viewBox="0 0 20 20" fill="currentColor">
+              <path
+                fill-rule="evenodd"
+                d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"
+                clip-rule="evenodd"
+              />
+            </svg>
+            Drift Reports</button
+          ><button class="tab-btn" data-tab="app" id="tab-app">
+            <svg viewBox="0 0 20 20" fill="currentColor">
+              <path
+                fill-rule="evenodd"
+                d="M2 5a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V5zm3.293 1.293a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 01-1.414-1.414L7.586 10 5.293 7.707a1 1 0 010-1.414zM11 12a1 1 0 100 2h3a1 1 0 100-2h-3z"
+                clip-rule="evenodd"
+              />
+            </svg>
+            App Snapshots</button
+          ><button class="tab-btn" data-tab="network" id="tab-network">
+            <svg viewBox="0 0 20 20" fill="currentColor">
+              <path
+                fill-rule="evenodd"
+                d="M17.707 9.293a1 1 0 010 1.414l-7 7a1 1 0 01-1.414 0l-7-7A.997.997 0 012 10V5a3 3 0 013-3h5c.256 0 .512.098.707.293l7 7zM5 6a1 1 0 100-2 1 1 0 000 2z"
+                clip-rule="evenodd"
+              />
+            </svg>
+            Network</button
+          ><button class="tab-btn" data-tab="config" id="tab-config">
+            <svg viewBox="0 0 20 20" fill="currentColor">
+              <path
+                fill-rule="evenodd"
+                d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z"
+                clip-rule="evenodd"
+              />
+            </svg>
+            Configuration
+          </button>
+        </nav>
+      </div>
+    </header>
+    <main>
+      <section id="approval-panel" class="approval-panel" style="display: none">
+        <div class="approval-inner">
+          <div class="approval-label">Pending Approval</div>
+          <div class="approval-grid">
+            <div class="approval-item">
+              <div class="approval-category">Drift</div>
+              <div class="approval-changes">
+                <span id="drift-changes">0</span> changes
+              </div>
+              <div class="approval-status" id="drift-status">✅ Approved</div>
+              <div class="approval-actions">
+                <button class="btn-approve" data-category="drift">
+                  Approve</button
+                ><button class="btn-reject" data-category="drift">
+                  Reject
+                </button>
+              </div>
+            </div>
+            <div class="approval-item">
+              <div class="approval-category">App</div>
+              <div class="approval-changes">
+                <span id="app-changes">0</span> changes
+              </div>
+              <div class="approval-status" id="app-status">✅ Approved</div>
+              <div class="approval-actions">
+                <button class="btn-approve" data-category="app">Approve</button
+                ><button class="btn-reject" data-category="app">Reject</button>
+              </div>
+            </div>
+            <div class="approval-item">
+              <div class="approval-category">Network</div>
+              <div class="approval-changes">
+                <span id="network-changes">0</span> changes
+              </div>
+              <div class="approval-status" id="network-status">✅ Approved</div>
+              <div class="approval-actions">
+                <button class="btn-approve" data-category="network">
+                  Approve</button
+                ><button class="btn-reject" data-category="network">
+                  Reject
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <div id="reportsView" class="tab-view active-view">
+        <section class="meta-bar animate-in">
+          <div class="meta-item">
+            <span class="meta-label">Server ID</span
+            ><span id="metaServerId" class="meta-value">—</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Hostname</span
+            ><span id="metaHostname" class="meta-value">—</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Generated</span
+            ><span id="metaGenerated" class="meta-value">—</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Previous</span
+            ><span id="metaPrev" class="meta-value mono">—</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Current</span
+            ><span id="metaCurr" class="meta-value mono">—</span>
+          </div>
+        </section>
+        <section class="cards" id="summaryCards">
+          <div class="card card-added">
+            <div class="card-icon">
+              <svg viewBox="0 0 20 20" fill="currentColor">
+                <path
+                  fill-rule="evenodd"
+                  d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"
+                  clip-rule="evenodd"
+                />
+              </svg>
+            </div>
+            <div class="card-body">
+              <div id="countAdded" class="card-count">0</div>
+              <div class="card-label">Added</div>
+            </div>
+          </div>
+          <div class="card card-deleted">
+            <div class="card-icon">
+              <svg viewBox="0 0 20 20" fill="currentColor">
+                <path
+                  fill-rule="evenodd"
+                  d="M3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"
+                  clip-rule="evenodd"
+                />
+              </svg>
+            </div>
+            <div class="card-body">
+              <div id="countDeleted" class="card-count">0</div>
+              <div class="card-label">Deleted</div>
+            </div>
+          </div>
+          <div class="card card-modified">
+            <div class="card-icon">
+              <svg viewBox="0 0 20 20" fill="currentColor">
+                <path
+                  d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"
+                />
+              </svg>
+            </div>
+            <div class="card-body">
+              <div id="countModified" class="card-count">0</div>
+              <div class="card-label">Modified</div>
+            </div>
+          </div>
+          <div class="card card-unchanged">
+            <div class="card-icon">
+              <svg viewBox="0 0 20 20" fill="currentColor">
+                <path
+                  fill-rule="evenodd"
+                  d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                  clip-rule="evenodd"
+                />
+              </svg>
+            </div>
+            <div class="card-body">
+              <div id="countUnchanged" class="card-count">0</div>
+              <div class="card-label">Unchanged</div>
+            </div>
+          </div>
+        </section>
+        <section class="bar-wrap">
+          <div id="statusBar" class="status-bar">
+            <div class="status-seg seg-added" style="width: 0%"></div>
+            <div class="status-seg seg-deleted" style="width: 0%"></div>
+            <div class="status-seg seg-modified" style="width: 0%"></div>
+            <div class="status-seg seg-unchanged" style="width: 0%"></div>
+          </div>
+        </section>
+        <div id="driftTopContent"></div>
+        <div id="driftAuditContent"></div>
+        <section id="emptyState" class="empty-state" style="display: none">
+          <div class="empty-icon">
+            <svg
+              viewBox="0 0 48 48"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="24" cy="24" r="20" />
+              <path d="M16 24l6 6 10-10" />
+            </svg>
+          </div>
+          <p class="empty-title">No differences detected</p>
+          <p class="empty-sub">
+            The previous and current snapshot are identical.
+          </p>
+        </section>
+        <section id="addedSection" class="panel" style="display: none">
+          <h2 class="panel-title added-title">
+            <span class="panel-dot dot-added"></span>Added
+            <span id="addedTitleCount" class="panel-count"></span>
+          </h2>
+          <ul id="addedList" class="path-list"></ul>
+        </section>
+        <section id="deletedSection" class="panel" style="display: none">
+          <h2 class="panel-title deleted-title">
+            <span class="panel-dot dot-deleted"></span>Deleted
+            <span id="deletedTitleCount" class="panel-count"></span>
+          </h2>
+          <ul id="deletedList" class="path-list"></ul>
+        </section>
+        <section id="modifiedSection" class="panel" style="display: none">
+          <h2 class="panel-title modified-title">
+            <span class="panel-dot dot-modified"></span>Modified
+            <span id="modifiedTitleCount" class="panel-count"></span>
+          </h2>
+          <div id="modifiedList" class="modified-list"></div>
+        </section>
+      </div>
+      <div id="appView" class="tab-view" style="display: none">
+        <div id="appNoData" class="empty-state" style="display: none">
+          <div class="empty-icon">
+            <svg
+              viewBox="0 0 48 48"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <rect x="6" y="6" width="36" height="36" rx="4" />
+              <line x1="16" y1="16" x2="32" y2="16" />
+              <line x1="16" y1="24" x2="28" y2="24" />
+              <line x1="16" y1="32" x2="24" y2="32" />
+            </svg>
+          </div>
+          <p class="empty-title">No application snapshot data</p>
+          <p class="empty-sub">
+            Pass <code>--app-dir /path/to/bin</code> when running
+            <code>visualize_report.py</code> to enable this tab.
+          </p>
+        </div>
+        <div id="appContent">
+          <section class="meta-bar animate-in">
+            <div class="meta-item">
+              <span class="meta-label">Total Files</span
+              ><span id="appTotalCount" class="meta-value">0</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">Executables</span
+              ><span id="appExecCount" class="meta-value">0</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">Scripts</span
+              ><span id="appScriptCount" class="meta-value">0</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">Symlinks</span
+              ><span id="appSymlinkCount" class="meta-value">0</span>
+            </div>
+          </section>
+          <section class="cards">
+            <div class="card card-exec">
+              <div class="card-icon">
+                <svg viewBox="0 0 20 20" fill="currentColor">
+                  <path
+                    fill-rule="evenodd"
+                    d="M2 5a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V5zm3.293 1.293a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 01-1.414-1.414L7.586 10 5.293 7.707a1 1 0 010-1.414zM11 12a1 1 0 100 2h3a1 1 0 100-2h-3z"
+                    clip-rule="evenodd"
+                  />
+                </svg>
+              </div>
+              <div class="card-body">
+                <div id="cardExecCount" class="card-count">0</div>
+                <div class="card-label">Executables</div>
+              </div>
+            </div>
+            <div class="card card-script">
+              <div class="card-icon">
+                <svg viewBox="0 0 20 20" fill="currentColor">
+                  <path
+                    fill-rule="evenodd"
+                    d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z"
+                    clip-rule="evenodd"
+                  />
+                </svg>
+              </div>
+              <div class="card-body">
+                <div id="cardScriptCount" class="card-count">0</div>
+                <div class="card-label">Scripts</div>
+              </div>
+            </div>
+            <div class="card card-link">
+              <div class="card-icon">
+                <svg viewBox="0 0 20 20" fill="currentColor">
+                  <path
+                    fill-rule="evenodd"
+                    d="M12.586 4.586a2 2 0 112.828 2.828l-3 3a2 2 0 01-2.828 0 1 1 0 00-1.414 1.414 4 4 0 005.656 0l3-3a4 4 0 00-5.656-5.656l-1.5 1.5a1 1 0 101.414 1.414l1.5-1.5zm-5 5a2 2 0 012.828 0 1 1 0 101.414-1.414 4 4 0 00-5.656 0l-3 3a4 4 0 105.656 5.656l1.5-1.5a1 1 0 10-1.414-1.414l-1.5 1.5a2 2 0 11-2.828-2.828l3-3z"
+                    clip-rule="evenodd"
+                  />
+                </svg>
+              </div>
+              <div class="card-body">
+                <div id="cardLinkCount" class="card-count">0</div>
+                <div class="card-label">Symlinks</div>
+              </div>
+            </div>
+          </section>
+          <div class="panel app-section" id="execSection">
+            <h3 class="section-title exec-title">
+              <span class="panel-dot dot-exec"></span>Executables
+              <span id="execTitleCount" class="panel-count"></span>
+            </h3>
+            <div class="table-wrap">
+              <table id="execTable" class="app-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Size</th>
+                    <th>Permissions</th>
+                    <th>Modified</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="panel app-section" id="scriptSection">
+            <h3 class="section-title script-title">
+              <span class="panel-dot dot-script"></span>Scripts
+              <span id="scriptTitleCount" class="panel-count"></span>
+            </h3>
+            <div class="table-wrap">
+              <table id="scriptTable" class="app-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>Size</th>
+                    <th>Permissions</th>
+                    <th>Modified</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="panel app-section" id="linkSection">
+            <h3 class="section-title link-title">
+              <span class="panel-dot dot-link"></span>Symlinks
+              <span id="linkTitleCount" class="panel-count"></span>
+            </h3>
+            <div class="table-wrap">
+              <table id="linkTable" class="app-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Target</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="networkView" class="tab-view" style="display: none">
+        <div id="networkNoData" class="empty-state" style="display: none">
+          <div class="empty-icon">
+            <svg
+              viewBox="0 0 48 48"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="24" cy="24" r="20" />
+              <path d="M8 24c0-8.837 7.163-16 16-16" />
+              <path d="M40 24c0 8.837-7.163 16-16 16" />
+              <path d="M4 24h40" />
+              <ellipse cx="24" cy="24" rx="7" ry="16" />
+            </svg>
+          </div>
+          <p class="empty-title">No network snapshot data</p>
+          <p class="empty-sub">
+            Pass
+            <code>--network-snapshot /path/to/config-snapshot.yaml</code> to
+            include network settings.
+          </p>
+        </div>
+        <div id="networkContent">
+          <div class="network-grid">
+            <div class="network-panel">
+              <div class="network-section-title">
+                <svg viewBox="0 0 16 16" fill="currentColor">
+                  <path
+                    d="M8 0a8 8 0 100 16A8 8 0 008 0zm.93 9.412l-2.29.287-.082.38.45.083c.294.07.352.176.288.469l-.738 3.468c-.194.897.105 1.319.808 1.319.545 0 1.178-.252 1.465-.598l.088-.416c-.2.176-.492.246-.686.246-.275 0-.375-.193-.304-.533L8.93 9.412zm-.93-2.81a1.125 1.125 0 110-2.25 1.125 1.125 0 010 2.25z"
+                  />
+                </svg>
+                Sysctl Kernel
+              </div>
+              <div class="table-wrap">
+                <table id="sysctlTable" class="network-table">
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="network-panel">
+              <div class="network-section-title">
+                <svg viewBox="0 0 16 16" fill="currentColor">
+                  <path
+                    d="M5 10.5a.5.5 0 01.5-.5h5a.5.5 0 010 1h-5a.5.5 0 01-.5-.5zM5 9.5a.5.5 0 01.5-.5h5a.5.5 0 010 1h-5A.5.5 0 015 9.5zM0 4a2 2 0 012-2h12a2 2 0 012 2v1a1 1 0 01-1 1H1a1 1 0 01-1-1V4zm3 3h10v5a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"
+                  />
+                </svg>
+                CPU & Power
+              </div>
+              <div class="table-wrap">
+                <table id="cpuTable" class="network-table">
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="network-panel">
+              <div class="network-section-title">
+                <svg viewBox="0 0 16 16" fill="currentColor">
+                  <path
+                    d="M11.5 8a3.5 3.5 0 11-7 0 3.5 3.5 0 017 0zm-3.5 2a2 2 0 100-4 2 2 0 000 4z"
+                  />
+                  <path
+                    d="M3.25 8A4.75 4.75 0 018 3.25v-1.5A6.25 6.25 0 001.75 8h1.5zm4.75 4.75A4.75 4.75 0 013.25 8h-1.5A6.25 6.25 0 008 14.25v-1.5zm4.75-4.75A4.75 4.75 0 018 12.75v1.5A6.25 6.25 0 0014.25 8h-1.5zm-4.75-4.75A4.75 4.75 0 0112.75 8h1.5A6.25 6.25 0 008 1.75v1.5z"
+                  />
+                </svg>
+                IRQ Affinity
+              </div>
+              <div class="table-wrap">
+                <table id="irqTable" class="network-table">
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="network-panel">
+              <div class="network-section-title">
+                <svg viewBox="0 0 16 16" fill="currentColor">
+                  <path
+                    d="M0 4a2 2 0 012-2h12a2 2 0 012 2v8a2 2 0 01-2 2H2a2 2 0 01-2-2V4zm2.5 1a.5.5 0 000 1h11a.5.5 0 000-1h-11zM2 8.5a.5.5 0 01.5-.5h3a.5.5 0 010 1h-3a.5.5 0 01-.5-.5zm0 2a.5.5 0 01.5-.5h7a.5.5 0 010 1h-7a.5.5 0 01-.5-.5z"
+                  />
+                </svg>
+                NIC & Ethtool
+              </div>
+              <div class="table-wrap">
+                <table id="nicTable" class="network-table">
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="network-panel">
+              <div class="network-section-title">
+                <svg viewBox="0 0 16 16" fill="currentColor">
+                  <path
+                    d="M8 3.5a.5.5 0 00-1 0V9a.5.5 0 00.252.434l3.5 2a.5.5 0 00.496-.868L8 8.71V3.5z"
+                  />
+                  <path
+                    d="M8 16A8 8 0 108 0a8 8 0 000 16zm7-8A7 7 0 111 8a7 7 0 0114 0z"
+                  />
+                </svg>
+                Time Sync
+              </div>
+              <div class="table-wrap">
+                <table id="timeTable" class="network-table">
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="network-panel">
+              <div class="network-section-title">
+                <svg viewBox="0 0 16 16" fill="currentColor">
+                  <path
+                    d="M0 2a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1v10.5a.5.5 0 01-.5.5h-13a.5.5 0 01-.5-.5V5a1 1 0 01-1-1V2zm2 3v10h12V5H2zm13-2H1v1h14V3z"
+                  />
+                </svg>
+                Hugepages & Tuned
+              </div>
+              <div class="table-wrap">
+                <table id="hpTable" class="network-table">
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="configView" class="tab-view" style="display: none">
+        <div id="configUnavailable" class="empty-state">
+          <div class="empty-icon">
+            <svg
+              viewBox="0 0 48 48"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="24" cy="24" r="20" />
+              <path d="M24 12v12l8 4" />
+            </svg>
+          </div>
+          <p class="empty-title">
+            Configuration editor requires the dashboard server
+          </p>
+          <p class="empty-sub">
+            Open this dashboard via <code>serve_dashboard.py</code> to enable
+            live config editing.
+          </p>
+        </div>
+        <div id="configContent" style="display: none">
+          <div
+            id="centralConfigBanner"
+            style="display: none"
+            class="central-config-banner"
+          >
+            <span class="central-config-banner__icon">🌐</span>
+            <div>
+              <strong>Editing via Central Platform</strong> — Changes are queued
+              on the central server and applied automatically on the agent’s
+              <em>next snapshot run</em>. Direct edits via
+              <code>serve_dashboard.py</code> on the agent take effect
+              immediately.
+            </div>
+          </div>
+          <section class="panel config-section">
+            <h2 class="panel-title config-title">
+              <span class="panel-dot dot-config"></span>General Settings
+            </h2>
+            <div class="config-form" id="generalForm">
+              <div class="form-group">
+                <label for="cfgServerId"
+                  >Server ID <span class="req">*</span></label
+                ><input type="text" id="cfgServerId" />
+              </div>
+              <div class="form-group">
+                <label for="cfgHostname">Hostname</label
+                ><input
+                  type="text"
+                  id="cfgHostname"
+                  placeholder="auto-detect if empty"
+                />
+              </div>
+              <div class="form-group">
+                <label for="cfgSnapshotDir"
+                  >Snapshot Directory <span class="req">*</span></label
+                ><input type="text" id="cfgSnapshotDir" />
+              </div>
+              <div class="form-group">
+                <label for="cfgReportDir"
+                  >Report Directory <span class="req">*</span></label
+                ><input type="text" id="cfgReportDir" />
+              </div>
+              <div class="form-group">
+                <label for="cfgLogFile">Log File</label
+                ><input type="text" id="cfgLogFile" placeholder="optional" />
+              </div>
+              <div class="form-group">
+                <label for="cfgMaxContentSize">Max Content Size (bytes)</label
+                ><input type="number" id="cfgMaxContentSize" value="5242880" />
+              </div>
+              <div class="form-group">
+                <label for="cfgRetentionCount">Retention Count</label
+                ><input type="number" id="cfgRetentionCount" value="30" />
+              </div>
+              <div class="form-group">
+                <label for="cfgChangeThreshold"
+                  >Change Threshold (0 = strict)</label
+                ><input type="number" id="cfgChangeThreshold" value="0" />
+              </div>
+            </div>
+          </section>
+          <section class="panel config-section">
+            <h2 class="panel-title config-title">
+              <span class="panel-dot dot-paths"></span>Monitored Paths
+              <button
+                type="button"
+                id="addPathBtn"
+                class="btn btn-sm btn-accent"
+              >
+                + Add Path
+              </button>
+            </h2>
+            <div
+              id="uncoveredPathsBanner"
+              class="config-uncovered-banner"
+              style="display: none"
+            ></div>
+            <div id="pathsList" class="paths-list"></div>
+            <div id="pathsEmpty" class="paths-empty">
+              No monitored paths configured.
+            </div>
+          </section>
+          <section class="panel config-section">
+            <h2 class="panel-title config-title">
+              <span class="panel-dot dot-alert"></span>Alerting
+            </h2>
+            <div class="config-form">
+              <div class="form-group">
+                <label for="cfgAlertCommand">Alert Command</label
+                ><input
+                  type="text"
+                  id="cfgAlertCommand"
+                  placeholder="null (disabled)"
+                />
+              </div>
+              <div class="form-group">
+                <label for="cfgWebhookUrl">Webhook URL</label
+                ><input
+                  type="text"
+                  id="cfgWebhookUrl"
+                  placeholder="null (disabled)"
+                />
+              </div>
+            </div>
+          </section>
+          <section class="panel config-section">
+            <h2 class="panel-title config-title">
+              <span class="panel-dot dot-dash"></span>Dashboard Settings
+            </h2>
+            <div class="config-form">
+              <div class="form-group">
+                <label for="cfgDashHost">Host</label
+                ><input type="text" id="cfgDashHost" value="127.0.0.1" />
+              </div>
+              <div class="form-group">
+                <label for="cfgDashPort">Port</label
+                ><input type="number" id="cfgDashPort" value="8080" />
+              </div>
+            </div>
+          </section>
+          <div class="config-actions">
+            <button
+              type="button"
+              id="reloadConfigBtn"
+              class="btn btn-secondary"
+            >
+              ↻ Reload</button
+            ><button type="button" id="saveConfigBtn" class="btn btn-primary">
+              💾 Save Configuration
+            </button>
+          </div>
+        </div>
+      </div>
+    </main>
+    <div id="pathModal" class="modal-overlay" style="display: none">
+      <div class="modal">
+        <div class="modal-header">
+          <h3 id="pathModalTitle">Add Monitored Path</h3>
+          <button type="button" class="modal-close" id="pathModalClose">
+            ×
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="modalPath"
+              >Path (absolute) <span class="req">*</span></label
+            ><input type="text" id="modalPath" placeholder="/etc/nginx" />
+          </div>
+          <div class="form-row">
+            <label class="toggle-label"
+              ><input type="checkbox" id="modalRecursive" checked />
+              Recursive</label
+            ><label class="toggle-label"
+              ><input type="checkbox" id="modalIncludeContent" /> Include
+              Content</label
+            >
+          </div>
+          <div class="form-group">
+            <div class="exc-header">
+              <label>Exceptions</label
+              ><button
+                type="button"
+                class="btn btn-xs btn-secondary"
+                id="addExceptionBtn"
+              >
+                + Add
+              </button>
+            </div>
+            <div id="modalExceptions" class="exceptions-list"></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="pathModalCancel">
+            Cancel</button
+          ><button type="button" class="btn btn-primary" id="pathModalSave">
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+    <div id="toastContainer" class="toast-container"></div>
+    <footer class="footer">
+      Generated by visualize_report.py __SCRIPT_VERSION__ · fully offline ·
+      __RENDERED_AT__
+    </footer>
+    <script id="report-data" type="application/json">
+      __REPORT_DATA_JSON__
+    </script>
+    <script id="app-data" type="application/json">
+      __APP_DATA_JSON__
+    </script>
+    <script id="network-data" type="application/json">
+      __NETWORK_DATA_JSON__
+    </script>
+    <script id="threshold-data" type="application/json">
+      __THRESHOLD_DATA_JSON__
+    </script>
+    <script>
+      __JS__;
+    </script>
+  </body>
+</html>

@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="ServerSnap Central — multi-server monitoring fleet dashboard"
+    />
+    <title>ServerSnap Central</title>
+    <link rel="stylesheet" href="/central.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <!-- ============================================================
+       HEADER
+  ============================================================ -->
+    <header class="top-bar" role="banner">
+      <div class="top-bar__brand">
+        <span class="top-bar__logo" aria-hidden="true">⬡</span>
+        <span class="top-bar__name">ServerSnap <strong>Central</strong></span>
+      </div>
+      <div class="top-bar__actions">
+        <div
+          id="refresh-indicator"
+          class="refresh-badge"
+          title="Auto-refresh interval"
+          aria-live="polite"
+        >
+          <span class="refresh-dot" id="refresh-dot"></span>
+          <span id="refresh-countdown">60s</span>
+        </div>
+        <a href="/logout" class="btn btn--ghost btn--sm" id="logout-btn"
+          >Sign out</a
+        >
+      </div>
+    </header>
+
+    <!-- ============================================================
+       MAIN — two views: grid (home) and detail
+  ============================================================ -->
+    <main id="app" role="main">
+      <!-- ── HOME VIEW ─────────────────────────────────── -->
+      <section id="view-home" class="view" aria-label="Fleet overview">
+        <!-- Stats bar -->
+        <div class="stats-bar" id="stats-bar" aria-label="Fleet statistics">
+          <div class="stat-chip stat-chip--healthy" id="stat-healthy">
+            <span class="stat-chip__dot"></span>
+            <span id="count-healthy">0</span> healthy
+          </div>
+          <div class="stat-chip stat-chip--stale" id="stat-stale">
+            <span class="stat-chip__dot"></span>
+            <span id="count-stale">0</span> stale
+          </div>
+          <div class="stat-chip stat-chip--unknown" id="stat-unknown">
+            <span class="stat-chip__dot"></span>
+            <span id="count-unknown">0</span> unknown
+          </div>
+          <div class="stat-chip stat-chip--changes" id="stat-changes">
+            <span class="stat-chip__dot"></span>
+            <span id="count-changes">0</span> with changes
+          </div>
+        </div>
+
+        <!-- Empty state -->
+        <div id="empty-state" class="empty-state" hidden>
+          <div class="empty-state__icon" aria-hidden="true">📡</div>
+          <h2 class="empty-state__title">No servers yet</h2>
+          <p class="empty-state__desc">
+            Configure agents with a <code>platform.url</code> pointing here,
+            then run <code>server_snapshot.py</code> to start seeing your fleet.
+          </p>
+        </div>
+
+        <!-- Card grid -->
+        <div
+          class="card-grid"
+          id="card-grid"
+          role="list"
+          aria-label="Server cards"
+        ></div>
+      </section>
+
+      <!-- ── DETAIL VIEW ────────────────────────────────── -->
+      <section id="view-detail" class="view" hidden aria-label="Server detail">
+        <div class="detail-nav">
+          <button
+            class="btn btn--ghost btn--sm"
+            id="back-btn"
+            aria-label="Back to fleet overview"
+          >
+            ← Fleet
+          </button>
+          <a
+            id="full-dashboard-btn"
+            class="btn btn--accent btn--sm"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Full Dashboard ↗
+          </a>
+        </div>
+
+        <div class="detail-header" id="detail-header">
+          <div class="detail-header__meta">
+            <h1 class="detail-header__id" id="detail-server-id">—</h1>
+            <span class="detail-header__hostname" id="detail-hostname">—</span>
+          </div>
+          <div class="detail-header__badges">
+            <span class="health-badge" id="detail-health-badge">—</span>
+            <span class="detail-header__last-seen" id="detail-last-seen"
+              >—</span
+            >
+          </div>
+        </div>
+
+        <!-- Change summary chips -->
+        <div class="change-chips" id="change-chips"></div>
+
+        <!-- Changed files list -->
+        <div class="detail-section">
+          <h2 class="detail-section__title">Changed Files</h2>
+          <div id="changed-files-list" class="files-list" role="list"></div>
+        </div>
+
+        <!-- Snapshot metadata -->
+        <div class="detail-section">
+          <h2 class="detail-section__title">Snapshot Metadata</h2>
+          <dl class="meta-grid" id="snapshot-meta"></dl>
+        </div>
+
+        <!-- Report approval history -->
+        <div class="detail-section">
+          <h2 class="detail-section__title">Report Approval History</h2>
+          <div
+            id="approval-history-list"
+            class="history-list"
+            role="list"
+          ></div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Loading overlay -->
+    <div
+      id="loading-overlay"
+      class="loading-overlay"
+      aria-live="assertive"
+      aria-label="Loading"
+    >
+      <div class="spinner"></div>
+    </div>
+
+    <!-- Toast notification -->
+    <div id="toast" class="toast" role="alert" aria-live="assertive"></div>
+
+    <script src="/central.js"></script>
+  </body>
+</html>

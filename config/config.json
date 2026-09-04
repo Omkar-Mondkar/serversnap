@@ -1,0 +1,87 @@
+{
+  "_comment_general": [
+    "This is a SAMPLE config. JSON does not support real comments, so all",
+    "documentation lives in keys prefixed with '_comment_*'. The script",
+    "ignores any key it does not recognize, so these are safe to keep or",
+    "remove. Copy this file to config.json and edit it for each server.",
+    "Deploy path expected by the script's default: /else/serversnap/config/config.json"
+  ],
+  "server_id": "web01",
+  "_comment_server_id": "Short, unique, stable identifier for this host. Used in snapshot/report filenames, so keep it filesystem-safe (letters, digits, -, _).",
+  "hostname": "web01.example.internal",
+  "_comment_hostname": "Optional. If omitted, the script falls back to socket.gethostname(). Example server for this deployment: Test Server.",
+  "snapshot_dir": "/else/serversnap/snapshots",
+  "_comment_snapshot_dir": "Absolute path where timestamped JSON snapshots are stored. Created automatically (mode 0700) if missing.",
+  "report_dir": "/else/serversnap/reports",
+  "_comment_report_dir": "Absolute path where timestamped JSON + text change reports are stored. Created automatically (mode 0700) if missing.",
+  "log_file": "/else/serversnap/logs/server_snapshot.log",
+  "_comment_log_file": "Optional. Rotating log file (10MB x 5 backups). Omit to log to stdout only (fine for systemd journal capture).",
+  "max_content_size_bytes": 5242880,
+  "_comment_max_content_size_bytes": "Files bigger than this (default 5MiB) will still be hashed, but their content will NOT be stored in the snapshot, even if include_content is true (avoids huge snapshot files / memory use).",
+  "retention_count": 30,
+  "_comment_retention_count": "Number of most recent snapshots/reports to keep per server_id. Older ones are pruned automatically after each run. Set to 0 to disable pruning.",
+  "paths": [
+    {
+      "_comment": "Example 1: a single critical file, always store full content so diffs show exact line changes.",
+      "path": "/etc/sysctl.conf",
+      "include_content": true
+    },
+    {
+      "_comment": "Example 2: a single file, metadata-only (no content stored) - useful for large or binary files where you only care about hash/perm/owner drift.",
+      "path": "/etc/ssh/sshd_config",
+      "include_content": true
+    },
+    {
+      "_comment": "Example 3: a directory monitored recursively (default). Content is off by default for the whole tree, with two file-level overrides in 'exceptions'.",
+      "path": "/etc/nginx",
+      "recursive": true,
+      "include_content": false,
+      "exceptions": [
+        {
+          "path": "/etc/nginx/nginx.conf",
+          "include_content": true
+        },
+        {
+          "_comment": "Glob patterns are also supported for exceptions.",
+          "pattern": "/etc/nginx/conf.d/*.conf",
+          "include_content": true
+        }
+      ]
+    },
+    {
+      "_comment": "Example 4: a directory monitored NON-recursively - only its immediate children are recorded, not nested subdirectories.",
+      "path": "/etc/cron.d",
+      "recursive": false,
+      "include_content": true
+    },
+    {
+      "_comment": "Example 5: monitor a whole directory tree for structure/permission drift only (e.g. a large shared data directory) without ever storing content.",
+      "path": "/opt/shared/app-config",
+      "recursive": true,
+      "include_content": false
+    }
+  ],
+  "alerting": {
+    "_comment": "Both are optional and independent; leave as null to disable. Nothing is sent externally unless you configure one of these yourself - everything else runs purely locally.",
+    "command": null,
+    "_comment_command": "Absolute path to a local executable/script run as: <command> <report_json_path> <report_text_path>. Also receives SERVER_SNAPSHOT_* environment variables (SERVER_ID, ADDED, DELETED, MODIFIED, REPORT_JSON, REPORT_TEXT). Example: '/else/serversnap/bin/notify.sh'",
+    "webhook_url": null,
+    "_comment_webhook_url": "If set, a small JSON summary (server_id, hostname, generated_at, summary counts) is POSTed here on change. Example (internal-only): 'http://Test Server:9000/hooks/server-snapshot'"
+  },
+  "dashboard": {
+    "_comment": "Optional, only used by bin/serve_dashboard.py. Sets the default bind host/port so you don't have to pass --host/--port every time. CLI flags always override these values.",
+    "host": "127.0.0.1",
+    "_comment_host": "SECURITY: 127.0.0.1 (default) only accepts connections from the server itself - reach it remotely via 'ssh -L 8080:127.0.0.1:8080 user@server'. Set to the server's real IP (e.g. 'Test Server') or '0.0.0.0' to serve http://<server-ip>:<port>/ directly on the network - only do this if the port is also restricted by your host firewall to trusted source IPs, and never expose it to the open internet (dashboards can contain full file content/diffs).",
+    "port": 8080,
+    "_comment_port": "TCP port serve_dashboard.py listens on."
+  },
+  "platform": {
+    "_comment": "Optional. Configure this block to push snapshots to a central serve_central.py hub after each run. Remove or omit the block entirely to disable push (no network calls are ever made without this section). See config/platform_config.json.sample for the central server's own config.",
+    "url": null,
+    "_comment_url": "Required to enable push. URL of the central server's ingest endpoint. Example: 'http://10.80.22.1:8090/api/ingest'. Leave null to disable.",
+    "api_key": null,
+    "_comment_api_key": "Shared secret that must match api_key in platform_config.json on the central server. Sent as X-API-Key header on every push.",
+    "push_always": true,
+    "_comment_push_always": "If true (default), push after every run regardless of whether changes were detected. If false, push only when the snapshot differs from the previous one."
+  }
+}

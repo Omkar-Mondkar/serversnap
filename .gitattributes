@@ -1,0 +1,12 @@
+# Enforce Unix LF line endings for all Python and shell scripts.
+# This prevents Windows Git from converting \n to \r\n on checkout,
+# which would break shebang lines (env: 'python3\r': No such file).
+
+*.py    text eol=lf
+*.sh    text eol=lf
+*.json  text eol=lf
+*.md    text eol=lf
+*.txt   text eol=lf
+*.yaml  text eol=lf
+*.yml   text eol=lf
+*.html  text eol=lf

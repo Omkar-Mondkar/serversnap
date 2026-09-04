@@ -1,0 +1,28 @@
+{
+  "_comment": "ServerSnap Central Platform Configuration",
+  "_comment_2": "Copy this file to platform_config.json and fill in the values. Keep this file secret — it contains credentials.",
+
+  "host": "0.0.0.0",
+  "port": 8090,
+
+  "data_dir": "./central_data",
+
+  "api_key": "REPLACE_WITH_A_LONG_RANDOM_STRING_e.g._uuid4",
+
+  "secret_key": "REPLACE_WITH_ANOTHER_LONG_RANDOM_SECRET_FOR_SESSION_SIGNING",
+
+  "users": {
+    "admin": "74f059173810ee5446a7d34942f47b48:9b87ae847fad067d94de5fe871286bfade8f5236e5d9521bd5402a7ea2d397d7"
+  },
+  "_comment_users": [
+    "Each entry is  'username': 'salt_hex:sha256_hex'.",
+    "Generate a hash with:  python3 bin/serve_central.py --hash-password <your-password>",
+    "The example hash above corresponds to password 'changeme' — replace it."
+  ],
+
+  "stale_threshold_minutes": 90,
+  "_comment_stale": "A server is marked 'stale' if its last push is older than this many minutes.",
+
+  "history_retention_count": 30,
+  "_comment_retention": "Number of per-snapshot history files to keep per server. Oldest are pruned on each ingest."
+}
