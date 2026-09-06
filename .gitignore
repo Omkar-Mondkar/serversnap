@@ -3,3 +3,13 @@ openspec/
 bin/__pycache__
 
 # Agent Push → Central Server Core → Storage → Auth → UI → Samples → Validation
+
+Output/
+approvals/
+audit.log
+baseline/
+baselines/
+history.json
+logs/
+reports/
+snapshots/
