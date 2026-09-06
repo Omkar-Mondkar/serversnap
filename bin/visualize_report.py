@@ -396,14 +396,30 @@ def load_yaml_snapshot(path: str) -> Dict[str, Any]:
     except (OSError, ValueError) as exc:
         raise VisualizeError(f"Failed to read/parse YAML snapshot {path}: {exc}") from exc
 def parse_network_settings(yaml_data: Dict[str, Any]) -> Dict[str, Any]:
-    """Extract and organize network-related settings from YAML snapshot."""
+    """Extract and organize ALL collected network/system settings from YAML snapshot.
+    Includes all 10 sections emitted by collect_network_snapshot.sh."""
     return {
-        "sysctl_kernel": yaml_data.get("sysctl_kernel", {}),
-        "cpu_isolation_power": yaml_data.get("cpu_isolation_power", {}),
-        "irq_affinity": yaml_data.get("irq_affinity", {}),
-        "nic_ethtool": yaml_data.get("nic_ethtool", {}),
-        "time_synchronization": yaml_data.get("time_synchronization", {}),
-        "hugepages_tuned": yaml_data.get("hugepages_tuned", {}),
+        # Section 1: OS & kernel metadata
+        "metadata":              yaml_data.get("metadata", {}),
+        # Section 2: Sysctl / TCP kernel params
+        "sysctl_kernel":         yaml_data.get("sysctl_kernel", {}),
+        # Section 3: CPU isolation, governor, C-states
+        "cpu_isolation_power":   yaml_data.get("cpu_isolation_power", {}),
+        # Section 4: IRQ affinity & irqbalance
+        "irq_affinity":          yaml_data.get("irq_affinity", {}),
+        # Section 5: NIC driver, rings, coalescing, offloads
+        "nic_ethtool":           yaml_data.get("nic_ethtool", {}),
+        # Section 6: Onload / Solarflare acceleration stack
+        "onload_solarflare":     yaml_data.get("onload_solarflare", {}),
+        # Section 7: Hugepages & tuned profile
+        "hugepages_tuned":       yaml_data.get("hugepages_tuned", {}),
+        # Section 8: NTP / PTP time sync state
+        "time_synchronization":  yaml_data.get("time_synchronization", {}),
+        # Section 9: Critical services & config checksums
+        "core_services":         yaml_data.get("core_services", {}),
+        "config_checksums":      yaml_data.get("config_checksums", {}),
+        # Section 10: File modification & integrity checks
+        "file_modification_checks": yaml_data.get("file_modification_checks", {}),
     }
 
 
@@ -555,6 +571,7 @@ def build_dashboard_html(
     app_data: Optional[Dict[str, Any]] = None,
     network_data: Optional[Dict[str, Any]] = None,
     threshold_data: Optional[Dict[str, Any]] = None,
+    network_diff: Optional[Dict[str, Any]] = None,
 ) -> str:
     data_json = json.dumps(entries, sort_keys=True)
     # Defend against premature </script> termination if any monitored file's
@@ -562,7 +579,11 @@ def build_dashboard_html(
     data_json = data_json.replace("</", "<\\/")
     app_json = json.dumps(app_data or {}, sort_keys=True, default=str).replace("</", "<\\/")
     network_json = json.dumps(network_data or {}, sort_keys=True, default=str).replace("</", "<\\/")
-    threshold_json = json.dumps(threshold_data or {"threshold": 0, "reports": {}}, sort_keys=True).replace("</", "<\\/")
+    # Merge network_diff into threshold_data so the UI can highlight changed rows.
+    _td = dict(threshold_data or {"threshold": 0, "reports": {}})
+    if network_diff:
+        _td["network_diff"] = network_diff
+    threshold_json = json.dumps(_td, sort_keys=True).replace("</", "<\\/")
     rendered_at = datetime.now(IST).strftime("%d %b %Y, %H:%M IST")
 
 
@@ -727,6 +748,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--title", help="Custom dashboard title")
     parser.add_argument("--app-dir", help="Application directory to scan for the Application Snapshots tab (optional, e.g. /bin)")
     parser.add_argument("--network-snapshot", help="Path to a YAML network snapshot file (e.g. Output/config-snapshot.yaml written by collect_network_snapshot.sh) for the Network Settings tab (optional)")
+    parser.add_argument("--network-diff", help="Path to a JSON file containing the network baseline diff (written by run_all.py). When present, changed network properties are highlighted in the dashboard.")
     parser.add_argument("--version", action="version", version=f"visualize_report {SCRIPT_VERSION}")
     args = parser.parse_args(argv)
 
@@ -848,6 +870,15 @@ def main(argv: Optional[List[str]] = None) -> int:
             yaml_data = load_yaml_snapshot(args.network_snapshot)
             network_data = parse_network_settings(yaml_data)
 
+        # Network drift diff (optional): highlights changed properties in UI.
+        network_diff: Optional[Dict[str, Any]] = None
+        if getattr(args, "network_diff", None) and os.path.isfile(args.network_diff):
+            try:
+                with open(args.network_diff, "r", encoding="utf-8") as _ndf:
+                    network_diff = json.load(_ndf)
+            except (OSError, json.JSONDecodeError):
+                pass
+
 
 
 
@@ -868,7 +899,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         threshold_data = _compute_threshold_data(
             entries, change_threshold, _approvals_dir, _this_server_id
         )
-        html_out = build_dashboard_html(entries, title, app_data, network_data, threshold_data)
+        html_out = build_dashboard_html(entries, title, app_data, network_data, threshold_data, network_diff)
 
 
         if args.output:

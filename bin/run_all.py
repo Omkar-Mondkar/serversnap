@@ -340,13 +340,43 @@ Examples:
         return 2
  
     dashboard_cmd = f"python3 {visualize_py} --config {config_file} --app-dir {app_dir}"
-   
+    
+    _net_diff_json = project_root / "Output" / "network_diff.json"
     if network_snapshot_yaml.exists() and not skip_network:
         dashboard_cmd += f" --network-snapshot {network_snapshot_yaml}"
         print_info(f"Including network settings from: {network_snapshot_yaml}")
+        # Pre-compute network baseline diff if baseline exists, so this run's dashboard includes live drift highlights
+        if HAS_APPROVAL_SYSTEM:
+            try:
+                sys.path.insert(0, str(script_dir))
+                from baseline_manager import BaselineManager  # type: ignore
+                from visualize_report import load_yaml_snapshot, parse_network_settings  # type: ignore
+                _bm = BaselineManager(server_id, str(project_root / "baselines"))
+                _curr_net = parse_network_settings(load_yaml_snapshot(str(network_snapshot_yaml)))
+                _has_net_chg, _net_diff = _bm.compare_with_baseline("network", _curr_net)
+                if _has_net_chg:
+                    _out_dir = project_root / "Output"
+                    _out_dir.mkdir(parents=True, exist_ok=True)
+                    _tmp_path = str(_net_diff_json) + ".tmp"
+                    with open(_tmp_path, "w", encoding="utf-8") as _f:
+                        json.dump(_net_diff, _f, indent=2)
+                    os.replace(_tmp_path, str(_net_diff_json))
+                else:
+                    if _net_diff_json.exists():
+                        try:
+                            _net_diff_json.unlink()
+                        except Exception:
+                            pass
+            except Exception:
+                pass
     else:
         print_info("Network snapshot not available - dashboard will show drift + app tabs only")
-   
+    
+    # If a network diff file exists, pass it so changed values are highlighted.
+    if _net_diff_json.exists():
+        dashboard_cmd += f" --network-diff {_net_diff_json}"
+        print_info(f"Including network drift highlights from: {_net_diff_json}")
+    
     print_info(f"Scanning app directory: {app_dir}")
     rc, out, err = run_command(dashboard_cmd, "Generating dashboard...")
    
@@ -535,6 +565,12 @@ Examples:
                     "network": network_snap_data,
                 })
                 print_success("Initial baselines created (approved)")
+                _ndiff_init = project_root / "Output" / "network_diff.json"
+                if _ndiff_init.exists():
+                    try:
+                        _ndiff_init.unlink()
+                    except Exception:
+                        pass
             else:
                 # Check for changes
                 changes_detected = False
@@ -555,6 +591,26 @@ Examples:
                             changes_detected = True
                             approver.record_pending_changes(category, diff, datetime.now().isoformat())
                             print_info(f"⏳ Changes detected in {category} - pending approval")
+                            # Persist network diff so dashboard can highlight changed rows.
+                            if category == "network":
+                                try:
+                                    _out_dir = project_root / "Output"
+                                    _out_dir.mkdir(parents=True, exist_ok=True)
+                                    _ndiff_path = _out_dir / "network_diff.json"
+                                    _ndiff_tmp = str(_ndiff_path) + ".tmp"
+                                    with open(_ndiff_tmp, "w", encoding="utf-8") as _ndf:
+                                        json.dump(diff, _ndf, indent=2)
+                                    os.replace(_ndiff_tmp, str(_ndiff_path))
+                                except Exception:
+                                    pass
+                        else:
+                            if category == "network":
+                                try:
+                                    _ndiff_path = project_root / "Output" / "network_diff.json"
+                                    if _ndiff_path.exists():
+                                        _ndiff_path.unlink()
+                                except Exception:
+                                    pass
                
                 if changes_detected:
                     print_info("\n📋 PENDING APPROVALS:")

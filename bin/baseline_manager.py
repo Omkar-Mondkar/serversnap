@@ -69,9 +69,8 @@ class BaselineManager:
         path = self._get_baseline_path(category)
         if not path.exists():
             return None
-       
         try:
-            with open(path, 'r') as f:
+            with open(path, 'r', encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
             print(f"Error loading baseline {category}: {e}")
@@ -80,21 +79,21 @@ class BaselineManager:
     def save_baseline(self, category: str, data: Dict[str, Any], reason: str = "approved") -> bool:
         """
         Save new approved baseline.
-       
+        
         Args:
             category: "drift", "app", or "network"
             data: Snapshot data to save as new baseline
             reason: Reason for update (e.g., "approved", "manual_override")
-       
+        
         Returns:
             True if successful
         """
         if category not in self.categories:
             print(f"Invalid category: {category}")
             return False
-       
+        
         baseline_path = self._get_baseline_path(category)
-       
+        
         # Add metadata
         baseline_with_meta = {
             "metadata": {
@@ -105,52 +104,65 @@ class BaselineManager:
             },
             "data": data
         }
-       
+        
+        tmp_fd, tmp_path = tempfile.mkstemp(
+            prefix=f".baseline_{category}_", dir=self.baseline_dir
+        )
         try:
-            with open(baseline_path, 'w') as f:
+            with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
                 json.dump(baseline_with_meta, f, indent=2)
- 
+                f.write("\n")
+            os.replace(tmp_path, baseline_path)
+
             # Record in history
             self._record_history(category, baseline_with_meta, "saved")
-           
-            print(f"✅ Baseline saved: {category}")
             return True
         except Exception as e:
+            try:
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+            except OSError:
+                pass
             print(f"Error saving baseline {category}: {e}")
             return False
    
     def _record_history(self, category: str, data: Dict[str, Any], action: str) -> None:
         """Record baseline history for audit trail."""
         history_path = self._get_history_path(category)
-       
+        
         history = []
         if history_path.exists():
             try:
-                with open(history_path, 'r') as f:
+                with open(history_path, 'r', encoding="utf-8") as f:
                     history = json.load(f)
             except Exception:
                 history = []
-       
+        
         history.append({
             "timestamp": datetime.now().isoformat(),
             "action": action,
             "category": category,
             "metadata": data.get("metadata", {})
         })
-       
+        
         # Keep last 50 entries
         history = history[-50:]
-       
+        
         try:
-            with open(history_path, 'w') as f:
+            tmp_fd, tmp_path = tempfile.mkstemp(
+                prefix=f".hist_{category}_", dir=self.baseline_dir
+            )
+            with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
                 json.dump(history, f, indent=2)
+                f.write("\n")
+            os.replace(tmp_path, history_path)
         except Exception:
             pass
    
     def compare_with_baseline(self, category: str, new_data: Dict[str, Any]) -> Tuple[bool, Dict[str, Any]]:
         """
         Compare new snapshot with approved baseline.
-       
+        
         Returns:
             (has_changes, diff_dict)
         """
@@ -200,11 +212,52 @@ class BaselineManager:
        
         elif category == "network":
             diff["modified_settings"] = {}
-            for key in new_data.keys():
-                if key in old_data and old_data[key] != new_data[key]:
-                    diff["modified_settings"][key] = {
-                        "old": old_data[key],
-                        "new": new_data[key]
+            for sec_or_key, val in new_data.items():
+                old_val = old_data.get(sec_or_key)
+                if isinstance(val, dict) and isinstance(old_val, dict):
+                    for sub_k, sub_v in val.items():
+                        if sub_k in old_val and old_val[sub_k] != sub_v:
+                            diff["modified_settings"][sub_k] = {
+                                "old": old_val[sub_k],
+                                "new": sub_v,
+                                "section": sec_or_key,
+                            }
+                        elif sub_k not in old_val:
+                            diff["modified_settings"][sub_k] = {
+                                "old": None,
+                                "new": sub_v,
+                                "section": sec_or_key,
+                            }
+                    for sub_k in old_val:
+                        if sub_k not in val:
+                            diff["modified_settings"][sub_k] = {
+                                "old": old_val[sub_k],
+                                "new": None,
+                                "section": sec_or_key,
+                            }
+                elif isinstance(val, dict) and old_val is None:
+                    for sub_k, sub_v in val.items():
+                        diff["modified_settings"][sub_k] = {
+                            "old": None,
+                            "new": sub_v,
+                            "section": sec_or_key,
+                        }
+                else:
+                    if sec_or_key in old_data and old_data[sec_or_key] != val:
+                        diff["modified_settings"][sec_or_key] = {
+                            "old": old_data[sec_or_key],
+                            "new": val,
+                        }
+                    elif sec_or_key not in old_data:
+                        diff["modified_settings"][sec_or_key] = {
+                            "old": None,
+                            "new": val,
+                        }
+            for old_k, old_v in old_data.items():
+                if old_k not in new_data and not isinstance(old_v, dict):
+                    diff["modified_settings"][old_k] = {
+                        "old": old_v,
+                        "new": None,
                     }
        
         return diff

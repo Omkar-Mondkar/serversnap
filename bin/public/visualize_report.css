@@ -18,6 +18,17 @@
   --gray-bg: rgba(110, 127, 149, 0.12);
   --cyan: #39d353;
   --purple: #bc8cff;
+  --net-accent-indigo: #818cf8;
+  --net-accent-blue: #60a5fa;
+  --net-accent-amber: #fbbf24;
+  --net-accent-purple: #c084fc;
+  --net-accent-teal: #2dd4bf;
+  --net-accent-sky: #38bdf8;
+  --net-accent-orange: #fb923c;
+  --net-accent-green: #4ade80;
+  --net-accent-red: #f87171;
+  --net-accent-slate: #94a3b8;
+  --net-accent-yellow: #facc15;
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
   --shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
   --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.5);
@@ -41,6 +52,17 @@ html[data-theme="light"] {
   --red-bg: rgba(207, 34, 46, 0.1);
   --amber-bg: rgba(154, 103, 0, 0.12);
   --gray-bg: rgba(110, 118, 129, 0.1);
+  --net-accent-indigo: #4f46e5;
+  --net-accent-blue: #2563eb;
+  --net-accent-amber: #d97706;
+  --net-accent-purple: #9333ea;
+  --net-accent-teal: #0d9488;
+  --net-accent-sky: #0284c7;
+  --net-accent-orange: #ea580c;
+  --net-accent-green: #16a34a;
+  --net-accent-red: #dc2626;
+  --net-accent-slate: #475569;
+  --net-accent-yellow: #ca8a04;
 } /* ─── Reset ──────────────────────────────────────────────── */
 *,
 *::before,
@@ -1004,7 +1026,7 @@ main {
 .app-table tr,
 .network-table tr {
   animation: rowIn 0.18s ease both;
-} /* ─── Network grid ───────────────────────────────────────── */
+} /* ─── Network grid & Rich Network Control Panel ────────────── */
 .network-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
@@ -1041,6 +1063,325 @@ main {
   color: var(--text-dim);
   font-size: 12.5px;
   font-style: italic;
+}
+
+/* ─── Rich Network Tab Redesign & Drift Components ───────── */
+.net-drift-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  margin-bottom: 20px;
+  border-radius: var(--radius);
+  background: rgba(248, 81, 73, 0.12);
+  border: 1px solid rgba(248, 81, 73, 0.35);
+  color: var(--red);
+  font-size: 13px;
+  line-height: 1.5;
+  box-shadow: var(--shadow-sm);
+  animation: rowIn 0.25s ease-out;
+}
+.net-drift-banner svg {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+.net-drift-banner strong {
+  font-weight: 700;
+}
+
+.net-sections-container {
+  width: 100%;
+}
+
+.net-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 2px 0;
+  flex-wrap: wrap;
+}
+.net-toolbar-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.net-toolbar-count {
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--panel);
+  border: 1px solid var(--panel-b);
+  color: var(--text);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+.net-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.net-tool-btn {
+  background: var(--panel);
+  border: 1px solid var(--panel-b);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: var(--sans);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background var(--transition), border-color var(--transition), color var(--transition);
+}
+.net-tool-btn svg {
+  opacity: 0.75;
+}
+.net-tool-btn:hover {
+  background: var(--bg);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.net-tool-btn:hover svg {
+  opacity: 1;
+}
+
+.net-sections-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .net-sections-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.net-section-card {
+  background: var(--panel);
+  border: 1px solid var(--panel-b);
+  border-top: 3px solid var(--sec-accent, var(--accent));
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow var(--transition), border-color var(--transition);
+}
+.net-section-card:hover {
+  box-shadow: var(--shadow);
+}
+.net-section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--bg-alt);
+  border-bottom: 1px solid transparent;
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--transition), border-color var(--transition);
+}
+.net-section-header:hover {
+  background: var(--bg);
+}
+.net-section-card.open .net-section-header {
+  border-bottom-color: var(--panel-b);
+}
+.net-sec-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--sec-accent, var(--accent));
+}
+.net-sec-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0.2px;
+}
+.net-sec-meta {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.net-sec-drift-badge {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--red);
+  background: var(--red-bg);
+  border: 1px solid rgba(248, 81, 73, 0.4);
+  padding: 2px 8px;
+  border-radius: 12px;
+  letter-spacing: 0.2px;
+  animation: pulseNetDrift 2.2s infinite ease-in-out;
+}
+.net-sec-count {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-dim);
+  background: var(--bg);
+  padding: 2px 8px;
+  border-radius: 12px;
+  border: 1px solid var(--panel-b);
+}
+.net-sec-chevron {
+  font-size: 11px;
+  color: var(--text-dim);
+  transition: transform 0.22s ease;
+  display: inline-block;
+  user-select: none;
+  margin-left: 2px;
+}
+.net-section-card.open .net-sec-chevron {
+  transform: rotate(90deg);
+}
+
+/* Accordion open/close smooth animation */
+.net-section-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.net-section-card.open .net-section-body {
+  grid-template-rows: 1fr;
+}
+.net-section-body-inner {
+  overflow: hidden;
+}
+
+.net-rich-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.net-rich-table td {
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--panel-b);
+  vertical-align: top;
+}
+.net-rich-table tr:last-child td {
+  border-bottom: none;
+}
+.net-key-cell {
+  width: 38%;
+  min-width: 140px;
+}
+.net-key-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.35;
+}
+.net-key-raw {
+  display: block;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-dim);
+  margin-top: 2px;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  opacity: 0.85;
+}
+.net-val-cell {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+  word-break: break-word;
+  overflow-wrap: break-word;
+  line-height: 1.45;
+}
+.net-val {
+  font-weight: 500;
+}
+.net-unit {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-weight: 400;
+}
+
+.net-file-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 11.5px;
+  color: var(--text);
+}
+.net-file-list li {
+  margin: 3px 0;
+}
+.net-file-list code {
+  font-family: var(--mono);
+  background: var(--bg);
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--panel-b);
+}
+
+/* Drift highlighting */
+.net-drift-row {
+  background: rgba(248, 81, 73, 0.08) !important;
+}
+.net-drift-row td {
+  border-bottom-color: rgba(248, 81, 73, 0.25) !important;
+}
+.net-drift-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--red);
+  color: #ffffff;
+  margin-right: 8px;
+  vertical-align: middle;
+  animation: pulseNetDrift 2.2s infinite ease-in-out;
+}
+@keyframes pulseNetDrift {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.65; }
+}
+.net-old-value {
+  text-decoration: line-through;
+  color: var(--text-dim);
+  opacity: 0.85;
+  margin-right: 4px;
+  font-size: 11.5px;
+}
+
+/* Service status pill badges */
+.net-svc-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 9px;
+  border-radius: 12px;
+  text-transform: capitalize;
+  letter-spacing: 0.3px;
+}
+.net-svc-enabled {
+  background: var(--green-bg);
+  color: var(--green);
+  border: 1px solid rgba(63, 185, 80, 0.35);
+}
+.net-svc-disabled {
+  background: var(--red-bg);
+  color: var(--red);
+  border: 1px solid rgba(248, 81, 73, 0.35);
+}
+.net-svc-neutral {
+  background: var(--gray-bg);
+  color: var(--text-dim);
+  border: 1px solid var(--panel-b);
 } /* ─── Config form ────────────────────────────────────────── */
 .config-section {
   border-radius: var(--radius);

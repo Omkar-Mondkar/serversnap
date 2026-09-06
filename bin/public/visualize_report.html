@@ -485,104 +485,26 @@
           </p>
         </div>
         <div id="networkContent">
-          <div class="network-grid">
-            <div class="network-panel">
-              <div class="network-section-title">
-                <svg viewBox="0 0 16 16" fill="currentColor">
-                  <path
-                    d="M8 0a8 8 0 100 16A8 8 0 008 0zm.93 9.412l-2.29.287-.082.38.45.083c.294.07.352.176.288.469l-.738 3.468c-.194.897.105 1.319.808 1.319.545 0 1.178-.252 1.465-.598l.088-.416c-.2.176-.492.246-.686.246-.275 0-.375-.193-.304-.533L8.93 9.412zm-.93-2.81a1.125 1.125 0 110-2.25 1.125 1.125 0 010 2.25z"
-                  />
-                </svg>
-                Sysctl Kernel
-              </div>
-              <div class="table-wrap">
-                <table id="sysctlTable" class="network-table">
-                  <tbody></tbody>
-                </table>
-              </div>
+          <!-- Drift summary banner — shown only when network properties changed vs baseline -->
+          <div id="netDriftBanner" class="net-drift-banner" style="display:none"></div>
+          <div class="net-toolbar">
+            <div class="net-toolbar-title">
+              <span>System &amp; Network Configuration</span>
+              <span id="netCategoryCount" class="net-toolbar-count"></span>
             </div>
-            <div class="network-panel">
-              <div class="network-section-title">
-                <svg viewBox="0 0 16 16" fill="currentColor">
-                  <path
-                    d="M5 10.5a.5.5 0 01.5-.5h5a.5.5 0 010 1h-5a.5.5 0 01-.5-.5zM5 9.5a.5.5 0 01.5-.5h5a.5.5 0 010 1h-5A.5.5 0 015 9.5zM0 4a2 2 0 012-2h12a2 2 0 012 2v1a1 1 0 01-1 1H1a1 1 0 01-1-1V4zm3 3h10v5a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"
-                  />
-                </svg>
-                CPU & Power
-              </div>
-              <div class="table-wrap">
-                <table id="cpuTable" class="network-table">
-                  <tbody></tbody>
-                </table>
-              </div>
-            </div>
-            <div class="network-panel">
-              <div class="network-section-title">
-                <svg viewBox="0 0 16 16" fill="currentColor">
-                  <path
-                    d="M11.5 8a3.5 3.5 0 11-7 0 3.5 3.5 0 017 0zm-3.5 2a2 2 0 100-4 2 2 0 000 4z"
-                  />
-                  <path
-                    d="M3.25 8A4.75 4.75 0 018 3.25v-1.5A6.25 6.25 0 001.75 8h1.5zm4.75 4.75A4.75 4.75 0 013.25 8h-1.5A6.25 6.25 0 008 14.25v-1.5zm4.75-4.75A4.75 4.75 0 018 12.75v1.5A6.25 6.25 0 0014.25 8h-1.5zm-4.75-4.75A4.75 4.75 0 0112.75 8h1.5A6.25 6.25 0 008 1.75v1.5z"
-                  />
-                </svg>
-                IRQ Affinity
-              </div>
-              <div class="table-wrap">
-                <table id="irqTable" class="network-table">
-                  <tbody></tbody>
-                </table>
-              </div>
-            </div>
-            <div class="network-panel">
-              <div class="network-section-title">
-                <svg viewBox="0 0 16 16" fill="currentColor">
-                  <path
-                    d="M0 4a2 2 0 012-2h12a2 2 0 012 2v8a2 2 0 01-2 2H2a2 2 0 01-2-2V4zm2.5 1a.5.5 0 000 1h11a.5.5 0 000-1h-11zM2 8.5a.5.5 0 01.5-.5h3a.5.5 0 010 1h-3a.5.5 0 01-.5-.5zm0 2a.5.5 0 01.5-.5h7a.5.5 0 010 1h-7a.5.5 0 01-.5-.5z"
-                  />
-                </svg>
-                NIC & Ethtool
-              </div>
-              <div class="table-wrap">
-                <table id="nicTable" class="network-table">
-                  <tbody></tbody>
-                </table>
-              </div>
-            </div>
-            <div class="network-panel">
-              <div class="network-section-title">
-                <svg viewBox="0 0 16 16" fill="currentColor">
-                  <path
-                    d="M8 3.5a.5.5 0 00-1 0V9a.5.5 0 00.252.434l3.5 2a.5.5 0 00.496-.868L8 8.71V3.5z"
-                  />
-                  <path
-                    d="M8 16A8 8 0 108 0a8 8 0 000 16zm7-8A7 7 0 111 8a7 7 0 0114 0z"
-                  />
-                </svg>
-                Time Sync
-              </div>
-              <div class="table-wrap">
-                <table id="timeTable" class="network-table">
-                  <tbody></tbody>
-                </table>
-              </div>
-            </div>
-            <div class="network-panel">
-              <div class="network-section-title">
-                <svg viewBox="0 0 16 16" fill="currentColor">
-                  <path
-                    d="M0 2a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1v10.5a.5.5 0 01-.5.5h-13a.5.5 0 01-.5-.5V5a1 1 0 01-1-1V2zm2 3v10h12V5H2zm13-2H1v1h14V3z"
-                  />
-                </svg>
-                Hugepages & Tuned
-              </div>
-              <div class="table-wrap">
-                <table id="hpTable" class="network-table">
-                  <tbody></tbody>
-                </table>
-              </div>
+            <div class="net-toolbar-actions">
+              <button type="button" class="net-tool-btn" id="netExpandAllBtn" title="Expand all section cards">
+                <svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12"><path d="M1 8a.5.5 0 01.5-.5h13a.5.5 0 010 1h-13A.5.5 0 011 8zM8 1a.5.5 0 01.5.5v13a.5.5 0 01-1 0v-13A.5.5 0 018 1z"/></svg>
+                Expand All
+              </button>
+              <button type="button" class="net-tool-btn" id="netCollapseAllBtn" title="Collapse all section cards">
+                <svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12"><path d="M1 8a.5.5 0 01.5-.5h13a.5.5 0 010 1h-13A.5.5 0 011 8z"/></svg>
+                Collapse All
+              </button>
             </div>
           </div>
+          <!-- Section cards are dynamically rendered by renderNetworkData() in visualize_report.js -->
+          <div id="netSectionsContainer" class="net-sections-container"></div>
         </div>
       </div>
       <div id="configView" class="tab-view" style="display: none">

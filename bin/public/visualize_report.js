@@ -975,27 +975,228 @@
       q("linkSection").style.display = links.length ? "" : "none";
   }
 
-  /* ── Network Settings tab ────────────────────────────── */
-  function fillNetTable(tableId, data) {
-    var t = q(tableId);
-    if (!t) return;
+  /* ── Network Settings tab — Rich Renderer ───────────────── */
+
+  /* Human-readable label + unit + section for every raw YAML key */
+  var NETWORK_LABELS = {
+    /* metadata */
+    os_version:                    { label: "OS Version",                unit: "",      section: "metadata" },
+    kernel_release:                { label: "Kernel Release",            unit: "",      section: "metadata" },
+    /* sysctl_kernel */
+    kernel_sched_migration_cost_ns:{ label: "Sched Migration Cost",      unit: "ns",    section: "sysctl_kernel" },
+    kernel_sched_latency_ns:       { label: "Sched Latency",             unit: "ns",    section: "sysctl_kernel" },
+    kernel_sched_min_granularity_ns:{ label: "Sched Min Granularity",    unit: "ns",    section: "sysctl_kernel" },
+    kernel_sched_autogroup_enabled:{ label: "Autogroup Scheduling",      unit: "",      section: "sysctl_kernel" },
+    net_core_rmem_max:             { label: "Socket Recv Buffer Max",     unit: "bytes", section: "sysctl_kernel" },
+    net_core_wmem_max:             { label: "Socket Send Buffer Max",     unit: "bytes", section: "sysctl_kernel" },
+    net_ipv4_tcp_rmem:             { label: "TCP Recv Buffer",            unit: "",      section: "sysctl_kernel" },
+    net_ipv4_tcp_wmem:             { label: "TCP Send Buffer",            unit: "",      section: "sysctl_kernel" },
+    net_ipv4_tcp_fin_timeout:      { label: "TCP FIN Timeout",           unit: "sec",   section: "sysctl_kernel" },
+    net_ipv4_tcp_tw_reuse:         { label: "TCP TIME_WAIT Reuse",       unit: "",      section: "sysctl_kernel" },
+    net_ipv4_ip_forward:           { label: "IP Forwarding",             unit: "",      section: "sysctl_kernel" },
+    net_ipv4_tcp_keepalive_time:   { label: "TCP Keepalive Time",        unit: "sec",   section: "sysctl_kernel" },
+    net_ipv4_tcp_keepalive_intvl:  { label: "TCP Keepalive Interval",    unit: "sec",   section: "sysctl_kernel" },
+    net_ipv4_tcp_keepalive_probes: { label: "TCP Keepalive Probes",      unit: "",      section: "sysctl_kernel" },
+    vm_swappiness:                 { label: "VM Swappiness",             unit: "",      section: "sysctl_kernel" },
+    vm_overcommit_memory:          { label: "Memory Overcommit",         unit: "",      section: "sysctl_kernel" },
+    fs_file_max:                   { label: "Max Open Files (fs)",       unit: "",      section: "sysctl_kernel" },
+    /* cpu_isolation_power */
+    isolcpus:                      { label: "Isolated CPUs",             unit: "",      section: "cpu_isolation_power" },
+    nohz_full:                     { label: "NOHZ Full CPUs",            unit: "",      section: "cpu_isolation_power" },
+    cpufreq_governor:              { label: "CPU Frequency Governor",    unit: "",      section: "cpu_isolation_power" },
+    disabled_cstates_cpu0:         { label: "Disabled C-States (cpu0)",  unit: "",      section: "cpu_isolation_power" },
+    /* irq_affinity */
+    irqbalance_status:             { label: "IRQBalance Status",         unit: "",      section: "irq_affinity" },
+    default_smp_affinity:          { label: "Default SMP Affinity",      unit: "",      section: "irq_affinity" },
+    /* nic_ethtool */
+    sample_physical_interface:     { label: "Interface",                 unit: "",      section: "nic_ethtool" },
+    driver:                        { label: "Driver",                    unit: "",      section: "nic_ethtool" },
+    driver_version:                { label: "Driver Version",            unit: "",      section: "nic_ethtool" },
+    firmware_version:              { label: "Firmware Version",          unit: "",      section: "nic_ethtool" },
+    ring_rx:                       { label: "RX Ring Buffer Size",       unit: "desc",  section: "nic_ethtool" },
+    ring_tx:                       { label: "TX Ring Buffer Size",       unit: "desc",  section: "nic_ethtool" },
+    coalesce_rx_usecs:             { label: "RX Coalescing Delay",       unit: "µs",    section: "nic_ethtool" },
+    coalesce_tx_usecs:             { label: "TX Coalescing Delay",       unit: "µs",    section: "nic_ethtool" },
+    /* onload_solarflare */
+    installed:                     { label: "Installed",                 unit: "",      section: "onload_solarflare" },
+    version:                       { label: "Version",                   unit: "",      section: "onload_solarflare" },
+    config_present:                { label: "Config Present",            unit: "",      section: "onload_solarflare" },
+    /* hugepages_tuned */
+    hugepages_2M_nr:               { label: "2M Hugepages",              unit: "pages", section: "hugepages_tuned" },
+    hugepages_1G_nr:               { label: "1G Hugepages",              unit: "pages", section: "hugepages_tuned" },
+    thp_enabled:                   { label: "Transparent HP Mode",       unit: "",      section: "hugepages_tuned" },
+    thp_defrag:                    { label: "Transparent HP Defrag",     unit: "",      section: "hugepages_tuned" },
+    tuned_active_profile:          { label: "Tuned Active Profile",      unit: "",      section: "hugepages_tuned" },
+    /* time_synchronization */
+    chrony_sync_status:            { label: "Chrony Sync Status",        unit: "",      section: "time_synchronization" },
+    ntp_active_peer:               { label: "NTP Active Peer",           unit: "",      section: "time_synchronization" },
+    ptp4l_status:                  { label: "PTP4L Service Status",      unit: "",      section: "time_synchronization" },
+    /* core_services */
+    irqbalance:                    { label: "IRQ Balance",               unit: "",      section: "core_services" },
+    chronyd:                       { label: "Chrony Daemon",             unit: "",      section: "core_services" },
+    haproxy:                       { label: "HAProxy",                   unit: "",      section: "core_services" },
+    keepalived:                    { label: "Keepalived",                unit: "",      section: "core_services" },
+    ptp4l:                         { label: "PTP4L",                     unit: "",      section: "core_services" },
+  };
+
+  /* Section definitions: key, title, icon path, accent CSS var */
+  var NETWORK_SECTIONS = [
+    {
+      key: "metadata",
+      title: "OS & Kernel",
+      accent: "--net-accent-indigo",
+      icon: '<path d="M3 3.5A1.5 1.5 0 014.5 2h7A1.5 1.5 0 0113 3.5v9a1.5 1.5 0 01-1.5 1.5h-7A1.5 1.5 0 013 12.5v-9zm1.5-.5a.5.5 0 00-.5.5v9a.5.5 0 00.5.5h7a.5.5 0 00.5-.5v-9a.5.5 0 00-.5-.5h-7z"/><path d="M5 5.5a.5.5 0 01.5-.5h5a.5.5 0 010 1h-5a.5.5 0 01-.5-.5zm0 2a.5.5 0 01.5-.5h5a.5.5 0 010 1h-5a.5.5 0 01-.5-.5zm0 2a.5.5 0 01.5-.5h3a.5.5 0 010 1h-3a.5.5 0 01-.5-.5z"/>',
+    },
+    {
+      key: "sysctl_kernel",
+      title: "Kernel / Sysctl",
+      accent: "--net-accent-blue",
+      icon: '<path d="M8 4.754a3.246 3.246 0 100 6.492 3.246 3.246 0 000-6.492zM5.754 8a2.246 2.246 0 114.492 0 2.246 2.246 0 01-4.492 0z"/><path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 01-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 01-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 01.52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 011.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 011.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 01.52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 01-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 01-1.255-.52l-.094-.319z"/>',
+    },
+    {
+      key: "cpu_isolation_power",
+      title: "CPU & Power",
+      accent: "--net-accent-amber",
+      icon: '<path d="M5 0a.5.5 0 01.5.5V2h1V.5a.5.5 0 011 0V2h1V.5a.5.5 0 011 0V2h1V.5a.5.5 0 011 0V2A2.5 2.5 0 0114 4.5h1.5a.5.5 0 010 1H14v1h1.5a.5.5 0 010 1H14v1h1.5a.5.5 0 010 1H14v1h1.5a.5.5 0 010 1H14A2.5 2.5 0 0111.5 14v1.5a.5.5 0 01-1 0V14h-1v1.5a.5.5 0 01-1 0V14h-1v1.5a.5.5 0 01-1 0V14A2.5 2.5 0 012 11.5H.5a.5.5 0 010-1H2v-1H.5a.5.5 0 010-1H2v-1H.5a.5.5 0 010-1H2A2.5 2.5 0 014.5 2V.5A.5.5 0 015 0zm-.5 3A1.5 1.5 0 003 4.5v7A1.5 1.5 0 004.5 13h7a1.5 1.5 0 001.5-1.5v-7A1.5 1.5 0 0011.5 3h-7z"/>',
+    },
+    {
+      key: "irq_affinity",
+      title: "IRQ Affinity",
+      accent: "--net-accent-purple",
+      icon: '<path d="M11.5 8a3.5 3.5 0 11-7 0 3.5 3.5 0 017 0zm-3.5 2a2 2 0 100-4 2 2 0 000 4z"/><path d="M3.25 8A4.75 4.75 0 018 3.25v-1.5A6.25 6.25 0 001.75 8h1.5zm4.75 4.75A4.75 4.75 0 013.25 8h-1.5A6.25 6.25 0 008 14.25v-1.5zm4.75-4.75A4.75 4.75 0 018 12.75v1.5A6.25 6.25 0 0014.25 8h-1.5zm-4.75-4.75A4.75 4.75 0 0112.75 8h1.5A6.25 6.25 0 008 1.75v1.5z"/>',
+    },
+    {
+      key: "nic_ethtool",
+      title: "NIC & Ethtool",
+      accent: "--net-accent-teal",
+      icon: '<path d="M0 4a2 2 0 012-2h12a2 2 0 012 2v8a2 2 0 01-2 2H2a2 2 0 01-2-2V4zm2.5 1a.5.5 0 000 1h11a.5.5 0 000-1h-11zM2 8.5a.5.5 0 01.5-.5h3a.5.5 0 010 1h-3a.5.5 0 01-.5-.5zm0 2a.5.5 0 01.5-.5h7a.5.5 0 010 1h-7a.5.5 0 01-.5-.5z"/>',
+    },
+    {
+      key: "onload_solarflare",
+      title: "Onload / Solarflare",
+      accent: "--net-accent-sky",
+      icon: '<path d="M9.293 0H4a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V4.707A1 1 0 0013.707 4L10 .293A1 1 0 009.293 0zM9.5 3.5v-2l3 3h-2a1 1 0 01-1-1z"/>',
+    },
+    {
+      key: "hugepages_tuned",
+      title: "Hugepages & Tuned",
+      accent: "--net-accent-orange",
+      icon: '<path d="M0 2a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1v10.5a.5.5 0 01-.5.5h-13a.5.5 0 01-.5-.5V5a1 1 0 01-1-1V2zm2 3v10h12V5H2zm13-2H1v1h14V3z"/>',
+    },
+    {
+      key: "time_synchronization",
+      title: "Time Synchronization",
+      accent: "--net-accent-green",
+      icon: '<path d="M8 3.5a.5.5 0 00-1 0V9a.5.5 0 00.252.434l3.5 2a.5.5 0 00.496-.868L8 8.71V3.5z"/><path d="M8 16A8 8 0 108 0a8 8 0 000 16zm7-8A7 7 0 111 8a7 7 0 0114 0z"/>',
+    },
+    {
+      key: "core_services",
+      title: "Core Services",
+      accent: "--net-accent-red",
+      icon: '<path d="M8 1a7 7 0 100 14A7 7 0 008 1zM0 8a8 8 0 1116 0A8 8 0 010 8z"/><path d="M6.5 5.5v5a.5.5 0 001 0v-5a.5.5 0 00-1 0zm3 0v5a.5.5 0 001 0v-5a.5.5 0 00-1 0z"/>',
+    },
+    {
+      key: "config_checksums",
+      title: "Config Checksums",
+      accent: "--net-accent-slate",
+      icon: '<path d="M8 0a8 8 0 100 16A8 8 0 008 0zM2.04 4.326c.325 1.329 2.532 2.54 3.717 3.19.48.263.793.434.743.484-.08.08-.162.158-.242.234-.416.396-.787.749-.758 1.266.035.634.618.824 1.214 1.017.577.188 1.168.38 1.286.983.082.417-.075.988-.22 1.52-.215.782-.406 1.48.22 1.48 1.5-.5 3.798-3.186 4-5 .138-1.243-2-2-3.5-2.5-.478-.16-.755.081-.99.284-.172.15-.322.279-.51.216-.445-.148-2.507-1.388-2.507-1.388z"/>',
+    },
+    {
+      key: "file_modification_checks",
+      title: "File Modifications",
+      accent: "--net-accent-yellow",
+      icon: '<path d="M8 15A7 7 0 118 1a7 7 0 010 14zm0 1A8 8 0 108 0a8 8 0 000 16z"/><path d="M7.002 11a1 1 0 112 0 1 1 0 01-2 0zM7.1 4.995a.905.905 0 111.8 0l-.35 3.507a.552.552 0 01-1.1 0L7.1 4.995z"/>',
+    },
+  ];
+
+  /* Service state badge helper */
+  var SERVICE_STATE_COLOURS = {
+    enabled:  "net-svc-enabled",
+    disabled: "net-svc-disabled",
+    active:   "net-svc-enabled",
+    inactive: "net-svc-disabled",
+    masked:   "net-svc-disabled",
+    "static": "net-svc-neutral",
+  };
+  function svcBadge(val) {
+    var v = String(val || "").trim().toLowerCase();
+    var cls = SERVICE_STATE_COLOURS[v] || "net-svc-neutral";
+    return '<span class="net-svc-badge ' + cls + '">' + esc(val) + "</span>";
+  }
+
+  function renderNetSection(secDef, data, diffMap) {
     var entries = Object.entries(data || {});
-    if (!entries.length) {
-      t.innerHTML =
-        '<tr><td colspan="2" class="net-empty">No data collected</td></tr>';
-      return;
-    }
-    t.innerHTML = entries
-      .map(function (kv) {
-        return (
-          "<tr><td>" +
-          esc(kv[0]) +
-          "</td><td>" +
-          esc(String(kv[1])) +
-          "</td></tr>"
-        );
-      })
-      .join("");
+    if (!entries.length) return "";
+    var accentVar = secDef.accent;
+    var isServices = secDef.key === "core_services";
+    var isFileList = secDef.key === "file_modification_checks";
+
+    var secDiffCount = 0;
+    var rows = entries.map(function (kv) {
+      var rawKey = kv[0];
+      var rawVal = kv[1];
+      var meta = NETWORK_LABELS[rawKey] || {};
+      var label = meta.label || rawKey.replace(/_/g, " ").replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+      var unit  = meta.unit || "";
+
+      /* Drift detection */
+      var changed = diffMap && diffMap[rawKey];
+      var driftHtml = "";
+      if (changed) {
+        secDiffCount++;
+        driftHtml = '<span class="net-drift-badge">CHANGED</span>' +
+          '<span class="net-old-value">' + esc(String(changed.old)) + ' → </span>';
+      }
+
+      /* Value formatting */
+      var valueHtml;
+      if (isServices) {
+        valueHtml = svcBadge(rawVal);
+      } else if (isFileList && Array.isArray(rawVal)) {
+        valueHtml = '<ul class="net-file-list">' +
+          rawVal.map(function (f) { return '<li><code>' + esc(f) + '</code></li>'; }).join("") +
+          '</ul>';
+      } else {
+        var displayVal = esc(String(rawVal == null ? "—" : rawVal));
+        valueHtml = '<span class="net-val">' + displayVal + '</span>';
+        if (unit && unit !== "desc") {
+          valueHtml += '<span class="net-unit"> ' + esc(unit) + '</span>';
+        }
+      }
+
+      return (
+        '<tr class="' + (changed ? "net-drift-row" : "") + '">' +
+        '<td class="net-key-cell"><span class="net-key-label">' + esc(label) + '</span>' +
+        '<span class="net-key-raw">' + esc(rawKey) + '</span></td>' +
+        '<td class="net-val-cell">' + driftHtml + valueHtml + '</td>' +
+        '</tr>'
+      );
+    }).join("");
+
+    /* Open by default if any property in this card has drifted */
+    var isOpen = secDiffCount > 0;
+    var driftBadgeHtml = secDiffCount > 0
+      ? '<span class="net-sec-drift-badge">' + secDiffCount + ' changed</span>'
+      : '';
+
+    return (
+      '<div class="net-section-card' + (isOpen ? ' open' : '') + '" style="--sec-accent: var(' + accentVar + ')">' +
+      '<div class="net-section-header" title="Click to expand or collapse">' +
+      '<svg viewBox="0 0 16 16" fill="currentColor" class="net-sec-icon">' + secDef.icon + '</svg>' +
+      '<span class="net-sec-title">' + esc(secDef.title) + '</span>' +
+      '<div class="net-sec-meta">' +
+      driftBadgeHtml +
+      '<span class="net-sec-count">' + entries.length + ' propert' + (entries.length === 1 ? 'y' : 'ies') + '</span>' +
+      '<span class="net-sec-chevron">&#9656;</span>' +
+      '</div>' +
+      '</div>' +
+      '<div class="net-section-body">' +
+      '<div class="net-section-body-inner">' +
+      '<div class="table-wrap">' +
+      '<table class="network-table net-rich-table"><tbody>' + rows + '</tbody></table>' +
+      '</div></div></div>' +
+      '</div>'
+    );
   }
 
   function renderNetworkData() {
@@ -1014,13 +1215,86 @@
     }
     if (noDataEl) noDataEl.style.display = "none";
     if (contentEl) contentEl.style.display = "";
-    fillNetTable("sysctlTable", networkData.sysctl_kernel);
-    fillNetTable("cpuTable", networkData.cpu_isolation_power);
-    fillNetTable("irqTable", networkData.irq_affinity);
-    fillNetTable("nicTable", networkData.nic_ethtool);
-    fillNetTable("timeTable", networkData.time_synchronization);
-    fillNetTable("hpTable", networkData.hugepages_tuned);
+
+    /* Collect drift map from threshold data */
+    var netDiff = (thresholdData && thresholdData.network_diff) || {};
+    var diffMap = netDiff.modified_settings || {};
+    var changedCount = Object.keys(diffMap).length;
+
+    /* Drift banner */
+    var banner = q("netDriftBanner");
+    if (banner) {
+      if (changedCount > 0) {
+        banner.innerHTML =
+          '<svg viewBox="0 0 16 16" fill="currentColor" width="16" height="16"><path d="M8.982 1.566a1.13 1.13 0 00-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 01-1.1 0L7.1 5.995A.905.905 0 018 5zm.002 6a1 1 0 110 2 1 1 0 010-2z"/></svg>' +
+          "<strong>" + changedCount + " network propert" + (changedCount === 1 ? "y" : "ies") + " changed</strong>" +
+          " since last approved baseline — review rows highlighted in red below.";
+        banner.style.display = "flex";
+      } else {
+        banner.style.display = "none";
+      }
+    }
+
+    /* Render sections */
+    var container = q("netSectionsContainer");
+    if (!container) return;
+    var visibleCount = 0;
+    var html = '<div class="net-sections-grid">';
+    NETWORK_SECTIONS.forEach(function (sec) {
+      var sectionData = networkData[sec.key];
+      if (!sectionData || typeof sectionData !== "object" || !Object.keys(sectionData).length) return;
+      visibleCount++;
+      /* Per-section diff: match by key in sectionData, explicit section attribute, or NETWORK_LABELS */
+      var secDiffMap = {};
+      Object.keys(diffMap).forEach(function (k) {
+        var d = diffMap[k];
+        if (d && d.section === sec.key) {
+          secDiffMap[k] = d;
+        } else if (Object.prototype.hasOwnProperty.call(sectionData, k)) {
+          secDiffMap[k] = d;
+        } else {
+          var meta = NETWORK_LABELS[k];
+          if (meta && meta.section === sec.key) secDiffMap[k] = d;
+        }
+      });
+      html += renderNetSection(sec, sectionData, secDiffMap);
+    });
+    html += "</div>";
+    container.innerHTML = html;
+
+    var catCount = q("netCategoryCount");
+    if (catCount) {
+      catCount.textContent = visibleCount + " categories";
+    }
   }
+
+  /* Network section card expand/collapse toggle */
+  document.addEventListener("click", function (e) {
+    var hdr = e.target.closest(".net-section-header");
+    if (hdr) {
+      var card = hdr.closest(".net-section-card");
+      if (card) card.classList.toggle("open");
+    }
+  });
+
+  /* Network toolbar Expand / Collapse All buttons */
+  var netExpandBtn = q("netExpandAllBtn");
+  if (netExpandBtn) {
+    netExpandBtn.addEventListener("click", function () {
+      document.querySelectorAll(".net-section-card").forEach(function (c) {
+        c.classList.add("open");
+      });
+    });
+  }
+  var netCollapseBtn = q("netCollapseAllBtn");
+  if (netCollapseBtn) {
+    netCollapseBtn.addEventListener("click", function () {
+      document.querySelectorAll(".net-section-card").forEach(function (c) {
+        c.classList.remove("open");
+      });
+    });
+  }
+
 
   /* ── Approval panel ──────────────────────────────────── */
   function _serverIdFromCentralPath() {
