@@ -140,9 +140,10 @@ import glob
 import html
 import json
 import os
+import re
 import sys
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 
@@ -562,7 +563,7 @@ def build_dashboard_html(
     app_json = json.dumps(app_data or {}, sort_keys=True, default=str).replace("</", "<\\/")
     network_json = json.dumps(network_data or {}, sort_keys=True, default=str).replace("</", "<\\/")
     threshold_json = json.dumps(threshold_data or {"threshold": 0, "reports": {}}, sort_keys=True).replace("</", "<\\/")
-    rendered_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    rendered_at = datetime.now(IST).strftime("%d %b %Y, %H:%M IST")
 
 
     html_template = _read_public("visualize_report.html")
@@ -585,10 +586,88 @@ def build_dashboard_html(
 
 
 
+
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def _fmt_ist(iso: str) -> str:
+    """Convert a UTC ISO-8601 timestamp to a human-readable IST string
+    truncated to minute precision, e.g. '06 Sep 2026, 05:35 IST'."""
+    try:
+        dt = datetime.fromisoformat(iso).astimezone(IST)
+        return dt.strftime("%d %b %Y, %H:%M IST")
+    except (ValueError, TypeError):
+        return iso or ""
+
+
+def _fmt_entity_name(name: str, iso_ts: Optional[str] = None) -> str:
+    """Format a report_ or snapshot_ entity name with an IST timestamp truncated
+    to minute precision, without spaces (e.g. report_web01_2026_09_05_22_15)."""
+    if not name:
+        return ""
+    stem = name[:-5] if name.endswith('.json') else (name[:-4] if name.endswith('.txt') or name.endswith('.html') else name)
+    ext = name[len(stem):]
+
+    prefix = ""
+    for p in ("report_", "snapshot_", "latest_report_", "latest_snapshot_"):
+        if stem.lower().startswith(p):
+            prefix = stem[:len(p)]
+            remainder = stem[len(p):]
+            break
+    if not prefix:
+        return name
+
+    if iso_ts:
+        try:
+            dt = datetime.fromisoformat(iso_ts).astimezone(IST)
+            ist_min = dt.strftime("%Y_%m_%d_%H_%M")
+            m_sid = re.match(r"^(.*?)_?(?:\d{4}.*)?$", remainder)
+            sid = m_sid.group(1) if m_sid else remainder
+            return f"{prefix}{sid}_{ist_min}{ext}" if sid else f"{prefix}{ist_min}{ext}"
+        except (ValueError, TypeError):
+            pass
+
+    # Check for ISO-like timestamp: e.g. web01_2026_09_05T18_27_35.165669+00_00
+    m_iso = re.match(r"^(.*?)_?(\d{4}[-_]\d{2}[-_]\d{2}T\d{2}[_:]\d{2}[_:]\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}[_:]?\d{2})?)$", remainder, re.I)
+    if m_iso:
+        sid = m_iso.group(1)
+        raw_iso = m_iso.group(2)
+        norm = re.sub(r"^(\d{4})_(\d{2})_(\d{2})", r"\1-\2-\3", raw_iso)
+        norm = re.sub(r"T(\d{2})_(\d{2})_(\d{2})", r"T\1:\2:\3", norm)
+        norm = re.sub(r"([+-]\d{2})_(\d{2})$", r"\1:\2", norm)
+        try:
+            dt = datetime.fromisoformat(norm).astimezone(IST)
+            ts_str = dt.strftime("%Y_%m_%d_%H_%M")
+            return f"{prefix}{sid}_{ts_str}{ext}" if sid else f"{prefix}{ts_str}{ext}"
+        except (ValueError, TypeError):
+            pass
+
+    # Check for standard underscore-separated format: web01_2026_09_05_18_27_35 or web01_2026_09_05_23_57
+    m_std = re.match(r"^(.*?)_?(\d{4})_(\d{2})_(\d{2})_(\d{2})_(\d{2})(?:_(\d{2}))?(?:_(\d+))?$", remainder)
+    if m_std:
+        sid2, y, mo, d, hr, mi, sec, counter = m_std.groups()
+        cnt_str = f"_{counter}" if counter else ""
+        if sec is not None:
+            try:
+                dt_utc = datetime(int(y), int(mo), int(d), int(hr), int(mi), int(sec), tzinfo=timezone.utc)
+                ts_str = dt_utc.astimezone(IST).strftime("%Y_%m_%d_%H_%M")
+                return f"{prefix}{sid2}_{ts_str}{cnt_str}{ext}" if sid2 else f"{prefix}{ts_str}{cnt_str}{ext}"
+            except ValueError:
+                pass
+        else:
+            ts_str = f"{y}_{mo}_{d}_{hr}_{mi}"
+            return f"{prefix}{sid2}_{ts_str}{cnt_str}{ext}" if sid2 else f"{prefix}{ts_str}{cnt_str}{ext}"
+
+    return name
+
+
 def _report_label(path: str, report: Dict[str, Any]) -> str:
     generated_at = report.get("generated_at")
     base = os.path.splitext(os.path.basename(path))[0]
-    return f"{generated_at} ({base})" if generated_at else base
+    label_ts = _fmt_ist(generated_at) if generated_at else ""
+    fmt_base = _fmt_entity_name(base, generated_at)
+    return f"{label_ts} ({fmt_base})" if label_ts else fmt_base
+
 
 
 
@@ -799,10 +878,14 @@ def main(argv: Optional[List[str]] = None) -> int:
             reports_base_dir = os.path.dirname(os.path.abspath(report_paths[-1]))
             # Dedicated subfolder, kept separate from raw report/snapshot JSON,
             # so an HTTP server (serve_dashboard.py) can be pointed only at
-            # rendered dashboards and never expose raw report data.
             out_dir = os.path.join(reports_base_dir, "dashboard")
-            ts = datetime.now(timezone.utc).strftime("%Y_%m_%d_%H_%M_%S")
-            output_path = os.path.join(out_dir, f"dashboard_{server_id_for_title}_{ts}.html")
+            ts = datetime.now(IST).strftime("%Y_%m_%d_%H_%M")
+            base_filename = f"dashboard_{server_id_for_title}_{ts}"
+            output_path = os.path.join(out_dir, f"{base_filename}.html")
+            counter = 1
+            while os.path.exists(output_path):
+                output_path = os.path.join(out_dir, f"{base_filename}_{counter}.html")
+                counter += 1
 
 
 

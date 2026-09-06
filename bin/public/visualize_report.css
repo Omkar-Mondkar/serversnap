@@ -1507,6 +1507,14 @@ main {
 }
 .exception-row input:focus {
   border-color: var(--accent);
+}
+/* Skip toggle — visually distinct (orange/warning) from Content toggle */
+.exc-skip-label {
+  color: #f59e0b;
+  font-weight: 600;
+}
+.exc-skip-label input[type="checkbox"] {
+  accent-color: #f59e0b;
 } /* ─── Toast ──────────────────────────────────────────────── */
 .toast-container {
   position: fixed;

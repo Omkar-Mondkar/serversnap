@@ -102,8 +102,10 @@ import stat
 import sys
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
+
+IST = timezone(timedelta(hours=5, minutes=30))
 
 
 
@@ -468,7 +470,15 @@ def store_push(data_dir: str, server_id: str, payload: Dict[str, Any]) -> None:
         gen_at = ""
         if isinstance(snap, dict):
             gen_at = snap.get("snapshot_at") or snap.get("generated_at") or ""
-        ts_clean = gen_at.replace(":", "_").replace("-", "_") if gen_at else ts
+        ts_clean = ""
+        if gen_at:
+            try:
+                dt = datetime.fromisoformat(gen_at).astimezone(IST)
+                ts_clean = dt.strftime("%Y_%m_%d_%H_%M")
+            except (ValueError, TypeError):
+                ts_clean = gen_at.replace(":", "_").replace("-", "_")
+        if not ts_clean:
+            ts_clean = datetime.now(IST).strftime("%Y_%m_%d_%H_%M")
         snap_id = f"snapshot_{server_id}_{ts_clean}.json"
         init_record = [{
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -1560,9 +1570,17 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
                     snapshot = payload.get("snapshot")
                     if not isinstance(snapshot, dict):
                         continue
-                    timestamp = datetime.fromisoformat(snapshot.get("generated_at", "")).strftime("%Y_%m_%d_%H_%M_%S")
-                    if snapshot_id.endswith(f"_{timestamp}.json"):
-                        return snapshot
+                    gen_at_str = snapshot.get("generated_at", "") or snapshot.get("snapshot_at", "")
+                    if gen_at_str:
+                        try:
+                            dt_snap = datetime.fromisoformat(gen_at_str)
+                            ts_ist_min = dt_snap.astimezone(IST).strftime("%Y_%m_%d_%H_%M")
+                            ts_utc_sec = dt_snap.strftime("%Y_%m_%d_%H_%M_%S")
+                            ts_utc_min = dt_snap.strftime("%Y_%m_%d_%H_%M")
+                            if any(snapshot_id.endswith(f"_{t}.json") or f"_{t}" in snapshot_id for t in (ts_ist_min, ts_utc_sec, ts_utc_min)):
+                                return snapshot
+                        except (ValueError, TypeError):
+                            pass
                 except (OSError, ValueError, TypeError, json.JSONDecodeError):
                     continue
         raise ValueError(f"Snapshot archive not found: {snapshot_id}")

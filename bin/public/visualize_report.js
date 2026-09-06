@@ -1,103 +1,3 @@
-// (function () {
-//   "use strict";
-
-//   /* ── Data ────────────────────────────────────────────── */
-//   var reports = JSON.parse(
-//     document.getElementById("report-data").textContent || "[]",
-//   );
-//   var appData = JSON.parse(
-//     (document.getElementById("app-data") || { textContent: "{}" })
-//       .textContent || "{}",
-//   );
-//   var networkData = JSON.parse(
-//     (document.getElementById("network-data") || { textContent: "{}" })
-//       .textContent || "{}",
-//   );
-//   var thresholdData = JSON.parse(
-//     (document.getElementById("threshold-data") || { textContent: "{}" })
-//       .textContent || "{}",
-//   );
-//   var selectedIndices = [];
-//   var configData = null;
-//   var editingPathIdx = -1;
-
-//   /* ── Element cache ───────────────────────────────────── */
-//   function q(id) {
-//     return document.getElementById(id);
-//   }
-//   var els = {
-//     subtitle: q("subtitle"),
-//     metaServerId: q("metaServerId"),
-//     metaHostname: q("metaHostname"),
-//     metaGenerated: q("metaGenerated"),
-//     metaPrev: q("metaPrev"),
-//     metaCurr: q("metaCurr"),
-//     countAdded: q("countAdded"),
-//     countDeleted: q("countDeleted"),
-//     countModified: q("countModified"),
-//     countUnchanged: q("countUnchanged"),
-//     segAdded: document.querySelector(".seg-added"),
-//     segDeleted: document.querySelector(".seg-deleted"),
-//     segModified: document.querySelector(".seg-modified"),
-//     segUnchanged: document.querySelector(".seg-unchanged"),
-//     driftTopContent: q("driftTopContent"),
-//     driftAuditContent: q("driftAuditContent"),
-//     emptyState: q("emptyState"),
-//     addedSection: q("addedSection"),
-//     deletedSection: q("deletedSection"),
-//     modifiedSection: q("modifiedSection"),
-//     addedList: q("addedList"),
-//     deletedList: q("deletedList"),
-//     modifiedList: q("modifiedList"),
-//     addedTitleCount: q("addedTitleCount"),
-//     deletedTitleCount: q("deletedTitleCount"),
-//     modifiedTitleCount: q("modifiedTitleCount"),
-//     searchBox: q("searchBox"),
-//     themeToggle: q("themeToggle"),
-//     reportTrigger: q("reportTrigger"),
-//     reportDropdown: q("reportDropdown"),
-//     reportSelectedText: q("reportSelectedText"),
-//     reportCheckboxes: q("reportCheckboxes"),
-//     compareReportsToggle: q("compareReportsToggle"),
-//     searchFieldWrap: q("searchFieldWrap"),
-//   };
-
-//   /* ── Utils ───────────────────────────────────────────── */
-//   function esc(s) {
-//     var d = document.createElement("div");
-//     d.textContent = s == null ? "" : String(s);
-//     return d.innerHTML;
-//   }
-
-//   function animateCount(el, target) {
-//     var start = 0;
-//     var duration = 500;
-//     var startTime = null;
-//     function step(ts) {
-//       if (!startTime) startTime = ts;
-//       var progress = Math.min((ts - startTime) / duration, 1);
-//       var ease = 1 - Math.pow(1 - progress, 3);
-//       el.textContent = Math.round(ease * target);
-//       if (progress < 1) requestAnimationFrame(step);
-//     }
-//     requestAnimationFrame(step);
-//   }
-
-//   function showToast(msg, type) {
-//     var c = q("toastContainer");
-//     var t = document.createElement("div");
-//     t.className = "toast toast-" + (type || "info");
-//     t.textContent = msg;
-//     c.appendChild(t);
-//     setTimeout(function () {
-//       t.style.opacity = "0";
-//       t.style.transform = "translateX(30px) scale(0.9)";
-//       t.style.transition = "all .25s ease";
-//       setTimeout(function () {
-//         if (t.parentNode) t.parentNode.removeChild(t);
-//       }, 280);
-//     }, 3200);
-//   }
 (function () {
   "use strict";
 
@@ -198,6 +98,246 @@
       }, 280);
     }, 3200);
   }
+
+  function formatBytes(b) {
+    var u = ["B", "KB", "MB", "GB"];
+    var s = b;
+    var i = 0;
+    while (s >= 1024 && i < u.length - 1) {
+      s /= 1024;
+      i++;
+    }
+    return s.toFixed(1) + " " + u[i];
+  }
+
+  function formatDate(iso) {
+    if (!iso) return "—";
+    try {
+      var s = String(iso).trim();
+      if (/^\d{4}_\d{2}_\d{2}/.test(s)) {
+        s = s
+          .replace(/^(\d{4})_(\d{2})_(\d{2})/, "$1-$2-$3")
+          .replace(/T(\d{2})_(\d{2})_(\d{2})/, "T$1:$2:$3")
+          .replace(/([+-]\d{2})_(\d{2})$/, "$1:$2");
+      }
+      var d = new Date(s.replace(" ", "T"));
+      if (isNaN(d.getTime())) return iso;
+      return (
+        d.toLocaleString("en-IN", {
+          timeZone: "Asia/Kolkata",
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        }) + " IST"
+      );
+    } catch (e) {
+      return iso || "—";
+    }
+  }
+
+  function formatEntityName(name) {
+    if (!name) return "";
+    var filename = name.split("/").pop().split("\\").pop();
+    var ext = "";
+    var dotIdx = filename.lastIndexOf(".");
+    var stem = filename;
+    if (dotIdx !== -1) {
+      stem = filename.slice(0, dotIdx);
+      ext = filename.slice(dotIdx);
+    }
+    var preMatch = stem.match(
+      /^(report|snapshot|latest_report|latest_snapshot)_(.+)$/i,
+    );
+    if (!preMatch) return filename;
+    var prefix = preMatch[1];
+    var remainder = preMatch[2];
+
+    // 1. Check for ISO-like timestamp: e.g. web01_2026_09_05T18_27_35.165669+00_00
+    var isoMatch = remainder.match(
+      /^(.*?)_?(\d{4}[-_]\d{2}[-_]\d{2}T\d{2}[_:]\d{2}[_:]\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}[_:]?\d{2})?)$/i,
+    );
+    if (isoMatch) {
+      var sid = isoMatch[1] || "";
+      var rawIso = isoMatch[2];
+      var normIso = rawIso
+        .replace(/^(\d{4})_(\d{2})_(\d{2})/, "$1-$2-$3")
+        .replace(/T(\d{2})_(\d{2})_(\d{2})/, "T$1:$2:$3")
+        .replace(/([+-]\d{2})_(\d{2})$/, "$1:$2");
+      var d = new Date(normIso);
+      if (!isNaN(d.getTime())) {
+        var parts = new Intl.DateTimeFormat("en-GB", {
+          timeZone: "Asia/Kolkata",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        }).formatToParts(d);
+        var p = {};
+        parts.forEach(function (x) {
+          p[x.type] = x.value;
+        });
+        var tsStr =
+          p.year + "_" + p.month + "_" + p.day + "_" + p.hour + "_" + p.minute;
+        return (sid ? prefix + "_" + sid : prefix) + "_" + tsStr + ext;
+      }
+    }
+
+    // 2. Check for underscore-separated format: web01_2026_09_05_18_27_35 or web01_2026_09_05_23_57
+    var stdMatch = remainder.match(
+      /^(.*?)_?(\d{4})_(\d{2})_(\d{2})_(\d{2})_(\d{2})(?:_(\d{2}))?(?:_(\d+))?$/,
+    );
+    if (stdMatch) {
+      var sid2 = stdMatch[1] || "";
+      var y = parseInt(stdMatch[2], 10);
+      var mo = parseInt(stdMatch[3], 10) - 1;
+      var day = parseInt(stdMatch[4], 10);
+      var hr = parseInt(stdMatch[5], 10);
+      var min = parseInt(stdMatch[6], 10);
+      var sec =
+        stdMatch[7] !== undefined ? parseInt(stdMatch[7], 10) : undefined;
+      var counter = stdMatch[8] ? "_" + stdMatch[8] : "";
+
+      if (sec !== undefined) {
+        var utcDate = new Date(Date.UTC(y, mo, day, hr, min, sec));
+        var p2 = {};
+        new Intl.DateTimeFormat("en-GB", {
+          timeZone: "Asia/Kolkata",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        })
+          .formatToParts(utcDate)
+          .forEach(function (x) {
+            p2[x.type] = x.value;
+          });
+        var tsStr2 =
+          p2.year +
+          "_" +
+          p2.month +
+          "_" +
+          p2.day +
+          "_" +
+          p2.hour +
+          "_" +
+          p2.minute;
+        return (
+          (sid2 ? prefix + "_" + sid2 : prefix) +
+          "_" +
+          tsStr2 +
+          counter +
+          ext
+        );
+      } else {
+        var tsStr3 =
+          stdMatch[2] +
+          "_" +
+          stdMatch[3] +
+          "_" +
+          stdMatch[4] +
+          "_" +
+          stdMatch[5] +
+          "_" +
+          stdMatch[6];
+        return (
+          (sid2 ? prefix + "_" + sid2 : prefix) +
+          "_" +
+          tsStr3 +
+          counter +
+          ext
+        );
+      }
+    }
+
+    return filename;
+  }
+
+  /* ── Theme ───────────────────────────────────────────── */
+  var THEME_KEY = "snp_theme";
+  function applyTheme(t) {
+    document.documentElement.setAttribute("data-theme", t);
+    q("iconDark").style.display = t === "dark" ? "" : "none";
+    q("iconLight").style.display = t === "light" ? "" : "none";
+  }
+  els.themeToggle.addEventListener("click", function () {
+    var next =
+      document.documentElement.getAttribute("data-theme") === "dark"
+        ? "light"
+        : "dark";
+    applyTheme(next);
+    try {
+      localStorage.setItem(THEME_KEY, next);
+    } catch (e) {}
+  });
+  var saved = null;
+  try {
+    saved = localStorage.getItem(THEME_KEY);
+  } catch (e) {}
+  applyTheme(saved || "dark");
+
+  /* ── Tab switching ───────────────────────────────────── */
+  var TAB_IDS = ["reports", "app", "network", "config"];
+  function switchTab(name) {
+    TAB_IDS.forEach(function (id) {
+      var view = q(id + "View");
+      var btn = q("tab-" + id);
+      if (!view || !btn) return;
+      var active = id === name;
+      view.style.display = active ? "" : "none";
+      view.classList.toggle("active-view", active);
+      btn.classList.toggle("active", active);
+    });
+    /* Show/hide search only for reports tab */
+    if (els.searchFieldWrap)
+      els.searchFieldWrap.style.display = name === "reports" ? "" : "none";
+
+    if (name === "config") loadConfig();
+    if (name === "app") renderAppData();
+    if (name === "network") renderNetworkData();
+  }
+
+  document.getElementById("tabNav").addEventListener("click", function (e) {
+    var btn = e.target.closest(".tab-btn");
+    if (btn) switchTab(btn.dataset.tab);
+  });
+
+  /* ── Multi-select dropdown ───────────────────────────── */
+  function populateMultiSelect() {
+    els.reportCheckboxes.innerHTML = reports
+      .map(function (r, i) {
+        var basename = r.file ? r.file.split("/").pop().split("\\").pop() : "";
+        var rMeta = (thresholdData.reports || {})[basename];
+        var badgeHtml = "";
+        if (rMeta && rMeta.threshold_exceeded && rMeta.status === "pending") {
+          badgeHtml =
+            ' <span class="warning-badge" title="' +
+            esc(rMeta.report_label) +
+            '">⚠</span>';
+        }
+        return (
+          '<label class="ms-option">' +
+          '<input type="checkbox" value="' +
+          i +
+          '">' +
+          '<span class="ms-option-label" title="' +
+          esc(r.label) +
+          '">' +
+          esc(r.label) +
+          badgeHtml +
+          "</span>" +
+          "</label>"
+        );
+      })
+      .join("");
+  }
+
   function getSelectedIndices() {
     var out = [];
     els.reportCheckboxes
@@ -295,29 +435,44 @@
         else if (line.startsWith("@@")) cls += " diff-hunk";
         else if (line.startsWith("+")) cls += " diff-add";
         else if (line.startsWith("-")) cls += " diff-del";
-        return (
-          '<div class="' +
-          cls +
-          '">' +
-          esc(line.replace(/\\\\n$/, "")) +
-          "</div>"
+        var cleaned = line.replace(/\\n$/, "");
+        cleaned = cleaned.replace(
+          /(\d{4}[-_]\d{2}[-_]\d{2}[T ]\d{2}[:_]\d{2}[:_]\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}[:_]?\d{2})?)/g,
+          function (m) {
+            return formatDate(m);
+          },
         );
+        return '<div class="' + cls + '">' + esc(cleaned) + "</div>";
       })
       .join("");
   }
+
+  function formatFieldValue(key, val) {
+    if (val === null || val === undefined) return "—";
+    if (
+      key === "mtime" ||
+      key === "ctime" ||
+      (typeof val === "string" &&
+        /^\d{4}[-_]\d{2}[-_]\d{2}[T ]\d{2}[:_]\d{2}/.test(val))
+    ) {
+      return formatDate(val);
+    }
+    return String(val);
+  }
+
   function fieldRows(changes) {
     return Object.keys(changes || {})
       .map(function (k) {
-        var v = changes[k];
+        var v = changes[k] || {};
         return (
           '<tr><td class="field-name">' +
           esc(k) +
           "</td>" +
           '<td class="val-old">' +
-          esc(v.old) +
+          esc(formatFieldValue(k, v.old)) +
           "</td>" +
           '<td class="val-new">' +
-          esc(v["new"]) +
+          esc(formatFieldValue(k, v["new"])) +
           "</td></tr>"
         );
       })
@@ -376,7 +531,12 @@
         : "";
       var isBase = !(entry.data && entry.data.previous_snapshot);
       var rMeta = (thresholdData.reports || {})[basename];
-      if (rMeta && !isBase && rMeta.threshold_exceeded && rMeta.status === "pending") {
+      if (
+        rMeta &&
+        !isBase &&
+        rMeta.threshold_exceeded &&
+        rMeta.status === "pending"
+      ) {
         pendingExceeded.push(rMeta.report_label);
       }
     });
@@ -464,15 +624,18 @@
     // if (indices.length === 1 && !comparisonMode()) {
     if (indices.length === 1) {
       var sr = reports[indices[0]].data;
-      els.metaGenerated.textContent = sr.generated_at || "—";
-      els.metaPrev.textContent =
-        sr.previous_snapshot || "(none — baseline run)";
-      els.metaCurr.textContent = sr.current_snapshot || "—";
+      els.metaGenerated.textContent = formatDate(sr.generated_at);
+      els.metaPrev.textContent = sr.previous_snapshot
+        ? formatEntityName(sr.previous_snapshot)
+        : "(none — baseline run)";
+      els.metaCurr.textContent = sr.current_snapshot
+        ? formatEntityName(sr.current_snapshot)
+        : "—";
       els.subtitle.textContent = reports[indices[0]].label;
     } else {
       genAts.sort();
       els.metaGenerated.textContent =
-        (genAts[0] || "?") + " → " + (genAts[genAts.length - 1] || "?");
+        formatDate(genAts[0]) + " → " + formatDate(genAts[genAts.length - 1]);
       els.metaPrev.textContent = "(" + indices.length + " reports selected)";
       els.metaCurr.textContent = "(" + indices.length + " reports selected)";
       els.subtitle.textContent = comparisonMode()
@@ -609,12 +772,6 @@
           return data.report;
         });
       })
-      .then(function (r) {
-        return r.json().then(function (data) {
-          if (!r.ok) throw new Error(data.error || "Report comparison failed");
-          return data.report;
-        });
-      })
       .then(function (report) {
         var summary = report.summary || {};
         var added = report.added || [];
@@ -628,9 +785,11 @@
           "</strong></div></div>";
         els.metaServerId.textContent = report.server_id || "-";
         els.metaHostname.textContent = report.hostname || "-";
-        els.metaGenerated.textContent = targetEntry.data.generated_at || "-";
-        els.metaPrev.textContent = baseId;
-        els.metaCurr.textContent = targetId;
+        els.metaGenerated.textContent = targetEntry.data.generated_at
+          ? formatDate(targetEntry.data.generated_at)
+          : "-";
+        els.metaPrev.textContent = formatEntityName(baseId);
+        els.metaCurr.textContent = formatEntityName(targetId);
         els.subtitle.textContent = "Comparison view";
         animateCount(els.countAdded, added.length);
         animateCount(els.countDeleted, deleted.length);
@@ -1056,7 +1215,7 @@
             esc(r.action) +
             "</span></td>" +
             '<td class="mono">' +
-            esc(r.snapshot_id) +
+            esc(formatEntityName(r.snapshot_id)) +
             "</td>" +
             "<td>" +
             esc(r.user) +
@@ -1150,7 +1309,9 @@
             '<div class="audit-decision-row">' +
             '<span class="status-pill approved">&#10003; APPROVED</span>' +
             '<span class="audit-decision-meta">by <strong>system (initial baseline)</strong>' +
-            (report.generated_at ? " &bull; " + esc(formatDate(report.generated_at)) : "") +
+            (report.generated_at
+              ? " &bull; " + esc(formatDate(report.generated_at))
+              : "") +
             "</span>" +
             "</div>" +
             '<div class="audit-decision-reason"><span class="audit-reason-label">Reason / Note:</span> Auto-approved initial baseline</div>' +
@@ -1164,7 +1325,7 @@
             '<p class="audit-caption"><span class="audit-warn-count">' +
             changeCount +
             ' detected change(s)</span> in snapshot <span class="mono audit-snapshot-tag">' +
-            esc(snapshot) +
+            esc(formatEntityName(snapshot)) +
             "</span></p>" +
             '<div class="config-form audit-controls">' +
             '<div class="form-group">' +
@@ -1577,8 +1738,9 @@
       var ep = row.querySelector(".exc-path").value.trim();
       var eg = row.querySelector(".exc-pattern").value.trim();
       var ec = row.querySelector(".exc-content").checked;
+      var esk = row.querySelector(".exc-skip").checked;
       if (ep || eg) {
-        var exc = { include_content: ec };
+        var exc = { include_content: ec, skip: esk };
         if (ep) exc.path = ep;
         else exc.pattern = eg;
         exceptions.push(exc);
@@ -1610,13 +1772,18 @@
       .map(function (e) {
         return (
           '<div class="exception-row">' +
-          '<input type="text" class="exc-path" placeholder="Exact path" value="' +
+          '<input type="text" class="exc-path" placeholder="Exact path (e.g. /etc/nginx/cache)" value="' +
           esc(e.path || "") +
           '">' +
-          '<input type="text" class="exc-pattern" placeholder="Glob pattern" value="' +
+          '<input type="text" class="exc-pattern" placeholder="Glob (e.g. /etc/nginx/**/*.bak)" value="' +
           esc(e.pattern || "") +
           '">' +
-          '<label class="toggle-label"><input type="checkbox" class="exc-content"' +
+          '<label class="toggle-label exc-skip-label" title="Skip: fully exclude from monitoring">' +
+          '<input type="checkbox" class="exc-skip"' +
+          (e.skip ? " checked" : "") +
+          ">Skip</label>" +
+          '<label class="toggle-label">' +
+          '<input type="checkbox" class="exc-content"' +
           (e.include_content ? " checked" : "") +
           ">Content</label>" +
           '<button type="button" class="btn btn-xs btn-danger remove-exc-btn">&times;</button>' +
@@ -1630,8 +1797,9 @@
     var r = document.createElement("div");
     r.className = "exception-row";
     r.innerHTML =
-      '<input type="text" class="exc-path" placeholder="Exact path">' +
-      '<input type="text" class="exc-pattern" placeholder="Glob pattern">' +
+      '<input type="text" class="exc-path" placeholder="Exact path (e.g. /etc/nginx/cache)">' +
+      '<input type="text" class="exc-pattern" placeholder="Glob (e.g. /etc/nginx/**/*.bak)">' +
+      '<label class="toggle-label exc-skip-label" title="Skip: fully exclude from monitoring"><input type="checkbox" class="exc-skip">Skip</label>' +
       '<label class="toggle-label"><input type="checkbox" class="exc-content">Content</label>' +
       '<button type="button" class="btn btn-xs btn-danger remove-exc-btn">&times;</button>';
     c.appendChild(r);

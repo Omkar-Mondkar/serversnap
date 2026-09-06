@@ -90,6 +90,120 @@ function timeAgo(isoString) {
   return `${days}d ago`;
 }
 
+function formatDate(iso) {
+  if (!iso) return "—";
+  try {
+    let s = String(iso).trim();
+    if (/^\d{4}_\d{2}_\d{2}/.test(s)) {
+      s = s
+        .replace(/^(\d{4})_(\d{2})_(\d{2})/, "$1-$2-$3")
+        .replace(/T(\d{2})_(\d{2})_(\d{2})/, "T$1:$2:$3")
+        .replace(/([+-]\d{2})_(\d{2})$/, "$1:$2");
+    }
+    const d = new Date(s.replace(" ", "T"));
+    if (isNaN(d.getTime())) return iso;
+    return (
+      d.toLocaleString("en-IN", {
+        timeZone: "Asia/Kolkata",
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }) + " IST"
+    );
+  } catch (e) {
+    return iso || "—";
+  }
+}
+
+function formatEntityName(name) {
+  if (!name) return "";
+  const filename = name.split("/").pop().split("\\").pop();
+  const dotIdx = filename.lastIndexOf(".");
+  const stem = dotIdx !== -1 ? filename.slice(0, dotIdx) : filename;
+  const ext = dotIdx !== -1 ? filename.slice(dotIdx) : "";
+  const preMatch = stem.match(
+    /^(report|snapshot|latest_report|latest_snapshot)_(.+)$/i,
+  );
+  if (!preMatch) return filename;
+  const prefix = preMatch[1];
+  const remainder = preMatch[2];
+
+  // 1. Check for ISO-like timestamp: e.g. web01_2026_09_05T18_27_35.165669+00_00
+  const isoMatch = remainder.match(
+    /^(.*?)_?(\d{4}[-_]\d{2}[-_]\d{2}T\d{2}[_:]\d{2}[_:]\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}[_:]?\d{2})?)$/i,
+  );
+  if (isoMatch) {
+    const sid = isoMatch[1] || "";
+    const rawIso = isoMatch[2];
+    const normIso = rawIso
+      .replace(/^(\d{4})_(\d{2})_(\d{2})/, "$1-$2-$3")
+      .replace(/T(\d{2})_(\d{2})_(\d{2})/, "T$1:$2:$3")
+      .replace(/([+-]\d{2})_(\d{2})$/, "$1:$2");
+    const d = new Date(normIso);
+    if (!isNaN(d.getTime())) {
+      const parts = new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Asia/Kolkata",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }).formatToParts(d);
+      const p = {};
+      parts.forEach((x) => {
+        p[x.type] = x.value;
+      });
+      const tsStr = `${p.year}_${p.month}_${p.day}_${p.hour}_${p.minute}`;
+      return (sid ? `${prefix}_${sid}` : prefix) + `_${tsStr}${ext}`;
+    }
+  }
+
+  // 2. Check for underscore-separated format: web01_2026_09_05_18_27_35 or web01_2026_09_05_23_57
+  const stdMatch = remainder.match(
+    /^(.*?)_?(\d{4})_(\d{2})_(\d{2})_(\d{2})_(\d{2})(?:_(\d{2}))?(?:_(\d+))?$/,
+  );
+  if (stdMatch) {
+    const sid2 = stdMatch[1] || "";
+    const y = parseInt(stdMatch[2], 10);
+    const mo = parseInt(stdMatch[3], 10) - 1;
+    const day = parseInt(stdMatch[4], 10);
+    const hr = parseInt(stdMatch[5], 10);
+    const min = parseInt(stdMatch[6], 10);
+    const sec =
+      stdMatch[7] !== undefined ? parseInt(stdMatch[7], 10) : undefined;
+    const counter = stdMatch[8] ? `_${stdMatch[8]}` : "";
+
+    if (sec !== undefined) {
+      const utcDate = new Date(Date.UTC(y, mo, day, hr, min, sec));
+      const p2 = {};
+      new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Asia/Kolkata",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      })
+        .formatToParts(utcDate)
+        .forEach((x) => {
+          p2[x.type] = x.value;
+        });
+      const tsStr2 = `${p2.year}_${p2.month}_${p2.day}_${p2.hour}_${p2.minute}`;
+      return (sid2 ? `${prefix}_${sid2}` : prefix) + `_${tsStr2}${counter}${ext}`;
+    } else {
+      const tsStr3 = `${stdMatch[2]}_${stdMatch[3]}_${stdMatch[4]}_${stdMatch[5]}_${stdMatch[6]}`;
+      return (sid2 ? `${prefix}_${sid2}` : prefix) + `_${tsStr3}${counter}${ext}`;
+    }
+  }
+
+  return filename;
+}
+
 function showLoading(on) {
   els.loadingOverlay.classList.toggle("visible", on);
 }
@@ -454,8 +568,8 @@ function renderMeta(data) {
   const fields = [
     ["Server ID", data.server_id],
     ["Hostname", data.hostname],
-    ["Snapshot at", data.snapshot_at],
-    ["Last seen", data.last_seen],
+    ["Snapshot at", formatDate(data.snapshot_at)],
+    ["Last seen", formatDate(data.last_seen)],
     [
       "Agent version",
       data.agent_version || data.snapshot?.agent_version || "—",
@@ -511,7 +625,7 @@ function renderApprovalHistory(reports) {
 
     const label = document.createElement("div");
     label.className = "history-item__label";
-    label.textContent = entry.report_label || entry.basename;
+    label.textContent = entry.report_label || formatEntityName(entry.basename);
     body.appendChild(label);
 
     const meta = document.createElement("div");
@@ -521,7 +635,7 @@ function renderApprovalHistory(reports) {
     const changeInfo =
       `${entry.change_count ?? 0} change(s)` +
       (entry.threshold_exceeded ? " (threshold exceeded)" : "");
-    meta.textContent = `${whenLabel} ${timeAgo(when)} · ${changeInfo}`;
+    meta.textContent = `${whenLabel} ${formatDate(when)} (${timeAgo(when)}) · ${changeInfo}`;
     body.appendChild(meta);
 
     if (entry.description) {

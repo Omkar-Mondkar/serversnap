@@ -104,8 +104,10 @@ import sys
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
+
+IST = timezone(timedelta(hours=5, minutes=30))
 
 
 
@@ -241,6 +243,23 @@ def setup_logging(log_file: Optional[str], verbose: bool) -> logging.Logger:
 
 
 
+
+
+# ---------------------------------------------------------------------------
+# Hostname resolution
+# ---------------------------------------------------------------------------
+
+
+def _resolve_hostname(cfg_hostname: Optional[str]) -> str:
+    """Return configured hostname if non-empty; otherwise auto-resolve the
+    machine's local IP address.  Falls back to socket.gethostname() if the
+    IP look-up fails (e.g. DNS not configured on the host)."""
+    if cfg_hostname:
+        return cfg_hostname
+    try:
+        return socket.gethostbyname(socket.gethostname())
+    except socket.gaierror:
+        return socket.gethostname()
 
 
 # ---------------------------------------------------------------------------
@@ -438,6 +457,20 @@ def _fmt_time(ts: float) -> str:
 
 
 
+def _should_skip_path(path: str, exceptions: List[Dict[str, Any]]) -> bool:
+    """Return True if any exception entry with skip=true matches *path*.
+    Supports exact path matches and glob patterns (including **)."""
+    for exc in exceptions:
+        if not exc.get("skip", False):
+            continue
+        pattern = exc.get("path") or exc.get("pattern")
+        if not pattern:
+            continue
+        if pattern == path or fnmatch.fnmatch(path, pattern):
+            return True
+    return False
+
+
 def _resolve_include_content(path: str, default_include: bool, exceptions: List[Dict[str, Any]]) -> bool:
     """Apply per-path exceptions (exact match or glob pattern) on top of a
     directory/file's default include_content setting."""
@@ -486,7 +519,8 @@ def iter_monitored_paths(entry_cfg: Dict[str, Any]):
 
     if not os.path.lexists(base_path):
         log.warning("Configured path does not exist on disk: %s", base_path)
-        yield base_path, _resolve_include_content(base_path, default_include, exceptions)
+        if not _should_skip_path(base_path, exceptions):
+            yield base_path, _resolve_include_content(base_path, default_include, exceptions)
         return
 
 
@@ -506,7 +540,8 @@ def iter_monitored_paths(entry_cfg: Dict[str, Any]):
 
 
     if stat.S_ISLNK(st.st_mode):
-        yield base_path, _resolve_include_content(base_path, default_include, exceptions)
+        if not _should_skip_path(base_path, exceptions):
+            yield base_path, _resolve_include_content(base_path, default_include, exceptions)
         return
 
 
@@ -518,7 +553,8 @@ def iter_monitored_paths(entry_cfg: Dict[str, Any]):
 
     if not stat.S_ISDIR(st.st_mode):
         # Plain file (or other special file type)
-        yield base_path, _resolve_include_content(base_path, default_include, exceptions)
+        if not _should_skip_path(base_path, exceptions):
+            yield base_path, _resolve_include_content(base_path, default_include, exceptions)
         return
 
 
@@ -528,8 +564,9 @@ def iter_monitored_paths(entry_cfg: Dict[str, Any]):
 
 
 
-    # Directory: always record the directory itself first.
-    yield base_path, _resolve_include_content(base_path, default_include, exceptions)
+    # Directory: always record the directory itself first (unless it itself is skipped).
+    if not _should_skip_path(base_path, exceptions):
+        yield base_path, _resolve_include_content(base_path, default_include, exceptions)
 
 
 
@@ -542,7 +579,8 @@ def iter_monitored_paths(entry_cfg: Dict[str, Any]):
         try:
             for name in sorted(os.listdir(base_path)):
                 full = os.path.join(base_path, name)
-                yield full, _resolve_include_content(full, default_include, exceptions)
+                if not _should_skip_path(full, exceptions):
+                    yield full, _resolve_include_content(full, default_include, exceptions)
         except OSError as exc:
             log.error("Could not list directory %s: %s", base_path, exc)
         return
@@ -551,12 +589,18 @@ def iter_monitored_paths(entry_cfg: Dict[str, Any]):
     for root, dirs, files in os.walk(base_path, followlinks=False):
         dirs.sort()
         files.sort()
+        # Prune skipped subdirectories in-place so os.walk won't descend into them.
+        dirs[:] = [
+            d for d in dirs
+            if not _should_skip_path(os.path.join(root, d), exceptions)
+        ]
         for name in dirs:
             full = os.path.join(root, name)
             yield full, _resolve_include_content(full, default_include, exceptions)
         for name in files:
             full = os.path.join(root, name)
-            yield full, _resolve_include_content(full, default_include, exceptions)
+            if not _should_skip_path(full, exceptions):
+                yield full, _resolve_include_content(full, default_include, exceptions)
 
 
 
@@ -762,7 +806,7 @@ def build_snapshot(config: Config) -> Dict[str, Any]:
     return {
         "schema_version": 1,
         "server_id": config.server_id,
-        "hostname": config.hostname or socket.gethostname(),
+        "hostname": _resolve_hostname(config.hostname),
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "config_path": config.config_path,
         "entry_count": len(entries),
@@ -876,10 +920,10 @@ def load_snapshot_file(path: str) -> Dict[str, Any]:
 
 
 def _timestamp() -> str:
-    """Return the current UTC time formatted as YYYY_MM_DD_HH_MM_SS, used for
+    """Return the current IST time formatted as YYYY_MM_DD_HH_MM, used for
     every snapshot/report filename so they sort chronologically and stay
-    human-readable."""
-    return datetime.now(timezone.utc).strftime("%Y_%m_%d_%H_%M_%S")
+    human-readable without spaces."""
+    return datetime.now(IST).strftime("%Y_%m_%d_%H_%M")
 
 
 
@@ -910,6 +954,11 @@ def save_snapshot(snapshot: Dict[str, Any], snapshot_dir: str) -> str:
     ts = _timestamp()
     filename = f"snapshot_{snapshot['server_id']}_{ts}.json"
     path = os.path.join(snapshot_dir, filename)
+    counter = 1
+    while os.path.exists(path):
+        filename = f"snapshot_{snapshot['server_id']}_{ts}_{counter}.json"
+        path = os.path.join(snapshot_dir, filename)
+        counter += 1
 
 
 
@@ -1147,15 +1196,15 @@ def build_report(
 
 
 def _short_timestamp(value: Any) -> str:
-    """Render an ISO-8601 UTC timestamp as 'YYYY-MM-DD HH:MM:SS UTC' for the
+    """Render an ISO-8601 timestamp as 'YYYY-MM-DD HH:MM IST' for the
     text report (full precision is still kept in the JSON report)."""
     if not isinstance(value, str):
         return "(none)" if value is None else str(value)
     try:
-        dt = datetime.fromisoformat(value)
+        dt = datetime.fromisoformat(value).astimezone(IST)
     except ValueError:
         return value
-    return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+    return dt.strftime("%Y-%m-%d %H:%M IST")
 
 
 
@@ -1330,6 +1379,11 @@ def save_report(
     ts = _timestamp()
     json_path = os.path.join(report_dir, f"report_{server_id}_{ts}.json")
     text_path = os.path.join(report_dir, f"report_{server_id}_{ts}.txt")
+    counter = 1
+    while os.path.exists(json_path) or os.path.exists(text_path):
+        json_path = os.path.join(report_dir, f"report_{server_id}_{ts}_{counter}.json")
+        text_path = os.path.join(report_dir, f"report_{server_id}_{ts}_{counter}.txt")
+        counter += 1
 
 
 
@@ -1761,7 +1815,7 @@ def push_to_platform(
     summary = report.get("summary", {})
     payload_dict: Dict[str, Any] = {
         "server_id": config.server_id,
-        "hostname": config.hostname or snapshot.get("hostname", ""),
+        "hostname": _resolve_hostname(config.hostname),
         "snapshot_at": snapshot.get("snapshot_at", ""),
         "has_changes": has_changes,
         "change_summary": {

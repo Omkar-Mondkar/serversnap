@@ -28,6 +28,7 @@ import base64
 import glob
 import json
 import os
+import socket
 import subprocess
 import sys
 import time
@@ -60,10 +61,13 @@ class Color:
     BOLD = '\033[1m'
 
 
-
-
-
-
+def _resolve_run_hostname() -> str:
+    """Auto-resolve local machine IP when hostname is not set in config.
+    Falls back to socket.gethostname() if IP lookup fails."""
+    try:
+        return socket.gethostbyname(socket.gethostname())
+    except socket.gaierror:
+        return socket.gethostname()
 
 
 def print_header(msg):
@@ -402,7 +406,7 @@ Examples:
                 # Assemble minimal payload (mirrors push_to_platform in server_snapshot.py).
                 _payload: dict = {
                     "server_id":      config.get("server_id", server_id),
-                    "hostname":       config.get("hostname", ""),
+                    "hostname":       config.get("hostname") or _resolve_run_hostname(),
                     "snapshot_at":    _latest_snap.get("snapshot_at", ""),
                     "has_changes":    _has_chg,
                     "change_summary": {
