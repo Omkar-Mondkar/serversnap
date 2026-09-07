@@ -45,14 +45,16 @@ class ApprovalAPIHandler:
         self.pending_file = self.approval_dir / f"pending_{server_id}.json"
         self.responses_file = self.approval_dir / f"responses_{server_id}.json"
    
-    def approve_changes(self, category: str, snapshot_data: Dict[str, Any]) -> Tuple[bool, str]:
+    def approve_changes(self, category: str, snapshot_data: Dict[str, Any], user: str = "dashboard_user", reason: str = "user_approved") -> Tuple[bool, str]:
         """
         Approve pending changes and save as new baseline.
-       
+        
         Args:
             category: "drift", "app", or "network"
             snapshot_data: Current snapshot data to save as baseline
-       
+            user: User name of approver
+            reason: Ticket or reason for approval
+        
         Returns:
             (success, message)
         """
@@ -60,74 +62,78 @@ class ApprovalAPIHandler:
             # Update baseline
             from baseline_manager import BaselineManager
             manager = BaselineManager(self.server_id, str(self.baseline_dir))
-            manager.save_baseline(category, snapshot_data, reason="user_approved")
-           
+            manager.save_baseline(category, snapshot_data, reason=reason or "user_approved")
+            
             # Record approval response
-            self._record_response(category, "approved", snapshot_data)
-           
+            self._record_response(category, "approved", snapshot_data, user=user, reason=reason)
+            
             # Update pending status
             self._update_pending_status(category, "approved")
-           
+            
             return True, f"✅ {category} changes approved and saved as baseline"
-       
+        
         except Exception as e:
             return False, f"❌ Error approving {category}: {str(e)}"
-   
-    def reject_changes(self, category: str) -> Tuple[bool, str]:
+    
+    def reject_changes(self, category: str, user: str = "dashboard_user", reason: str = "user_rejected") -> Tuple[bool, str]:
         """
         Reject pending changes (revert to previous baseline).
-       
+        
         Args:
             category: "drift", "app", or "network"
-       
+            user: User name
+            reason: Ticket or reason for rejection
+        
         Returns:
             (success, message)
         """
         try:
             # Load previous baseline (no action needed, just mark as rejected)
             # The system will continue using the old baseline
-           
+            
             # Record rejection
-            self._record_response(category, "rejected", {})
-           
+            self._record_response(category, "rejected", {}, user=user, reason=reason)
+            
             # Update pending status
             self._update_pending_status(category, "rejected")
-           
+            
             return True, f"❌ {category} changes rejected. Previous baseline remains active."
-       
+        
         except Exception as e:
             return False, f"Error rejecting {category}: {str(e)}"
-   
+    
     def _update_pending_status(self, category: str, status: str) -> None:
         """Update pending changes file with new status."""
         pending = self._load_json(self.pending_file)
-       
-        if category in pending:
-            pending[category]["status"] = status
-            pending[category]["response_at"] = datetime.now().isoformat()
-     
+        
+        if category not in pending:
+            pending[category] = {}
+        pending[category]["status"] = status
+        pending[category]["response_at"] = datetime.now().isoformat()
+      
         self._save_json(self.pending_file, pending)
-   
-    def _record_response(self, category: str, action: str, data: Dict[str, Any]) -> None:
+
+    def _record_response(self, category: str, action: str, data: Dict[str, Any], user: str = "dashboard_user", reason: str = "") -> None:
         """Record approval/rejection response."""
         responses = self._load_json(self.responses_file)
-       
+        
         if "responses" not in responses:
             responses["responses"] = []
-       
+        
         responses["responses"].append({
             "timestamp": datetime.now().isoformat(),
             "category": category,
             "action": action,
             "server_id": self.server_id,
-            "user": "dashboard_user"  # Could be extended with actual user tracking
+            "user": user or "dashboard_user",
+            "reason": reason or "",
         })
-       
+        
         # Keep last 100
         responses["responses"] = responses["responses"][-100:]
-       
+        
         self._save_json(self.responses_file, responses)
-   
+
     def _load_json(self, filepath: Path) -> Dict[str, Any]:
         """Load JSON file."""
         try:
@@ -137,7 +143,7 @@ class ApprovalAPIHandler:
         except Exception:
             pass
         return {}
-   
+
     def _save_json(self, filepath: Path, data: Dict[str, Any]) -> None:
         """Save JSON file."""
         try:
@@ -145,36 +151,41 @@ class ApprovalAPIHandler:
                 json.dump(data, f, indent=2)
         except Exception:
             pass
-   
+
     def get_approval_status(self) -> Dict[str, Any]:
         """Get current approval status for all categories."""
         pending = self._load_json(self.pending_file)
-       
+        
         status = {
             "server_id": self.server_id,
             "checked_at": datetime.now().isoformat(),
             "categories": {}
         }
-       
+        
         for category in ["drift", "app", "network"]:
             if category in pending and pending[category].get("status") == "pending":
-                # Count changes - either from "changes" dict or use 1 as default
                 category_data = pending[category]
                 changes_data = category_data.get("changes", {})
-               
-                # Count the number of changes
+                
                 if isinstance(changes_data, dict):
                     change_count = len(changes_data)
                 elif isinstance(changes_data, list):
                     change_count = len(changes_data)
                 else:
                     change_count = 1 if changes_data else 0
-               
+                
                 status["categories"][category] = {
                     "status": "pending",
                     "changes": change_count,
                     "timestamp": category_data.get("timestamp"),
                     "created_at": category_data.get("created_at")
+                }
+            elif category in pending and pending[category].get("status") in ("approved", "rejected"):
+                category_data = pending[category]
+                status["categories"][category] = {
+                    "status": category_data.get("status"),
+                    "changes": 0,
+                    "timestamp": category_data.get("response_at") or category_data.get("timestamp"),
                 }
             else:
                 # No pending changes for this category

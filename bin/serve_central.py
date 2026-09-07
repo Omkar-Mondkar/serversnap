@@ -881,6 +881,8 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
                 self._handle_get_report_status(server_id)
             elif sub == "audit-status":
                 self._handle_get_audit_status(server_id)
+            elif sub == "status":
+                self._handle_get_approval_status(server_id)
             else:
                 self._handle_get_server_detail(server_id)
             return
@@ -938,6 +940,20 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
                 return
             server_id = path[len("/api/server/"): -len("/report-reject")]
             self._handle_report_decision(server_id, "reject")
+            return
+
+        if path.startswith("/api/server/") and path.endswith("/approve"):
+            if self._require_auth() is None:
+                return
+            server_id = path[len("/api/server/"): -len("/approve")]
+            self._handle_baseline_decision(server_id, "approve")
+            return
+
+        if path.startswith("/api/server/") and path.endswith("/reject"):
+            if self._require_auth() is None:
+                return
+            server_id = path[len("/api/server/"): -len("/reject")]
+            self._handle_baseline_decision(server_id, "reject")
             return
 
 
@@ -1250,7 +1266,10 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
     "/api/report-reject": "/api/server/" + _centralServerId + "/report-reject",
     "/api/audit-status": "/api/server/" + _centralServerId + "/audit-status",
     "/api/snapshot-approve": "/api/server/" + _centralServerId + "/snapshot-approve",
-    "/api/snapshot-reject": "/api/server/" + _centralServerId + "/snapshot-reject"
+    "/api/snapshot-reject": "/api/server/" + _centralServerId + "/snapshot-reject",
+    "/api/status": "/api/server/" + _centralServerId + "/status",
+    "/api/approve": "/api/server/" + _centralServerId + "/approve",
+    "/api/reject": "/api/server/" + _centralServerId + "/reject"
   }};
   var _origFetch = window.fetch;
   window.fetch = function(input, init) {{
@@ -1502,7 +1521,6 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
     def _audit_history_path(self, server_id: str) -> str:
         return os.path.join(self.data_dir, server_id, "audit_history.json")
 
-
     def _handle_get_audit_status(self, server_id: str) -> None:
         try:
             with open(self._audit_history_path(server_id), "r", encoding="utf-8") as fh:
@@ -1512,6 +1530,49 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
         except (OSError, json.JSONDecodeError):
             history = []
         self._send_json({"history": history})
+
+    def _handle_get_approval_status(self, server_id: str) -> None:
+        try:
+            from approval_api import ApprovalAPIHandler  # type: ignore
+            approvals_dir = os.path.join(self.data_dir, server_id, "approvals")
+            baselines_dir = os.path.join(self.data_dir, server_id, "baselines")
+            handler = ApprovalAPIHandler(server_id, approvals_dir, baselines_dir)
+            self._send_json(handler.get_approval_status())
+        except Exception as exc:  # noqa: BLE001
+            self._send_json({"error": str(exc)}, 500)
+
+    def _handle_baseline_decision(self, server_id: str, action: str) -> None:
+        try:
+            body = self._read_body()
+            data = json.loads(body) if body else {}
+            category = data.get("category")
+            if category not in ("drift", "app", "network"):
+                self._send_json({"error": "'category' must be drift, app, or network"}, 400)
+                return
+            from approval_api import ApprovalAPIHandler  # type: ignore
+            approvals_dir = os.path.join(self.data_dir, server_id, "approvals")
+            baselines_dir = os.path.join(self.data_dir, server_id, "baselines")
+            handler = ApprovalAPIHandler(server_id, approvals_dir, baselines_dir)
+            if action == "approve":
+                success, msg = handler.approve_changes(
+                    category,
+                    data.get("snapshot_data", {}),
+                    user=data.get("user", "dashboard_user"),
+                    reason=data.get("reason", "user_approved"),
+                )
+            else:
+                success, msg = handler.reject_changes(
+                    category,
+                    user=data.get("user", "dashboard_user"),
+                    reason=data.get("reason", "user_rejected"),
+                )
+            self._send_json({
+                "success": success,
+                "message": msg,
+                "status": handler.get_approval_status(),
+            })
+        except Exception as exc:  # noqa: BLE001
+            self._send_json({"error": str(exc)}, 500)
 
 
     def _handle_snapshot_decision(self, server_id: str, action: str) -> None:

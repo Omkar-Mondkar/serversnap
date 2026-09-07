@@ -167,21 +167,51 @@ class BaselineManager:
             (has_changes, diff_dict)
         """
         baseline = self.load_baseline(category)
-       
+        
         if baseline is None:
             # No baseline yet, everything is new
             return True, {"status": "no_baseline", "note": "First snapshot"}
-       
+        
         baseline_data = baseline.get("data", {})
-       
-        # Simple comparison
-        if baseline_data == new_data:
-            return False, {"status": "no_changes"}
-       
+        
         # Generate diff
         diff = self._generate_diff(category, baseline_data, new_data)
+        
+        if category == "drift":
+            has_changes = bool(diff.get("added_files") or diff.get("removed_files") or diff.get("modified_files"))
+        elif category == "app":
+            has_changes = bool(diff.get("added_apps") or diff.get("removed_apps") or diff.get("updated_apps"))
+        elif category == "network":
+            has_changes = bool(diff.get("modified_settings"))
+        else:
+            has_changes = baseline_data != new_data
+        
+        if not has_changes:
+            return False, {"status": "no_changes"}
         return True, diff
-   
+
+    def _extract_app_map(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract name/path mapping from app snapshot data supporting both legacy and current schemas."""
+        apps: Dict[str, Any] = {}
+        if not isinstance(data, dict):
+            return apps
+        
+        # Legacy applications list
+        for item in data.get("applications", []):
+            if isinstance(item, dict):
+                k = item.get("path") or item.get("name")
+                if k:
+                    apps[k] = item
+
+        # Standard executables, scripts, symlinks
+        for section in ("executables", "scripts", "symlinks"):
+            for item in data.get(section, []):
+                if isinstance(item, dict):
+                    k = item.get("path") or item.get("name")
+                    if k:
+                        apps[k] = item
+        return apps
+
     def _generate_diff(self, category: str, old_data: Dict, new_data: Dict) -> Dict[str, Any]:
         """Generate detailed diff between old and new."""
         diff = {
@@ -189,7 +219,7 @@ class BaselineManager:
             "category": category,
             "timestamp": datetime.now().isoformat()
         }
-       
+        
         if category == "drift":
             diff["added_files"] = [k for k in new_data.keys() if k not in old_data]
             diff["removed_files"] = [k for k in old_data.keys() if k not in new_data]
@@ -197,18 +227,46 @@ class BaselineManager:
                 k for k in old_data.keys()
                 if k in new_data and old_data[k] != new_data[k]
             ]
-       
+        
         elif category == "app":
-            old_apps = {item["name"]: item for item in old_data.get("applications", [])}
-            new_apps = {item["name"]: item for item in new_data.get("applications", [])}
-           
-            diff["added_apps"] = [n for n in new_apps.keys() if n not in old_apps]
-            diff["removed_apps"] = [n for n in old_apps.keys() if n not in new_apps]
-            diff["updated_apps"] = [
-                {"name": n, "old": old_apps[n], "new": new_apps[n]}
-                for n in old_apps.keys()
-                if n in new_apps and old_apps[n] != new_apps[n]
-            ]
+            old_apps = self._extract_app_map(old_data)
+            new_apps = self._extract_app_map(new_data)
+            
+            diff["added_apps"] = [new_apps[n] for n in new_apps if n not in old_apps]
+            diff["removed_apps"] = [old_apps[n] for n in old_apps if n not in new_apps]
+            diff["updated_apps"] = []
+            for n in old_apps:
+                if n in new_apps:
+                    old_item = old_apps[n]
+                    new_item = new_apps[n]
+                    if isinstance(old_item, dict) and isinstance(new_item, dict):
+                        changes = []
+                        if old_item.get("size") != new_item.get("size"):
+                            changes.append(f"size: {old_item.get('size')} -> {new_item.get('size')}")
+                        if old_item.get("permissions") != new_item.get("permissions"):
+                            changes.append(f"permissions: {old_item.get('permissions')} -> {new_item.get('permissions')}")
+                        if old_item.get("target") != new_item.get("target"):
+                            changes.append(f"target: {old_item.get('target')} -> {new_item.get('target')}")
+                        if old_item.get("subtype") != new_item.get("subtype"):
+                            changes.append(f"subtype: {old_item.get('subtype')} -> {new_item.get('subtype')}")
+                        if old_item.get("type") != new_item.get("type"):
+                            changes.append(f"type: {old_item.get('type')} -> {new_item.get('type')}")
+                        if changes:
+                            diff["updated_apps"].append({
+                                "name": new_item.get("name", n),
+                                "path": n,
+                                "old": old_item,
+                                "new": new_item,
+                                "changes": changes
+                            })
+                    elif old_item != new_item:
+                        diff["updated_apps"].append({
+                            "name": n,
+                            "path": n,
+                            "old": old_item,
+                            "new": new_item,
+                            "changes": ["value changed"]
+                        })
        
         elif category == "network":
             diff["modified_settings"] = {}

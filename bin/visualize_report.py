@@ -461,14 +461,14 @@ def _compute_threshold_data(
     threshold: int,
     approvals_dir: Optional[str],
     server_id: str,
+    network_diff: Optional[Dict[str, Any]] = None,
+    app_diff: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Build the threshold metadata dict injected into the dashboard.
 
-
     For each report entry we compute:
-        change_count = len(added) + len(deleted) + len(modified)
+        change_count = len(added) + len(deleted) + len(modified) + app_changes + network_changes
     and look up any existing approval decision from ReportApprovalStore.
-
 
     We also register new reports as 'pending' in the store (no-op if a
     decision has already been recorded).
@@ -481,23 +481,35 @@ def _compute_threshold_data(
         except ImportError:
             pass
 
-
     reports_meta: Dict[str, Any] = {}
     for entry in entries:
         report = entry["data"]
         basename = os.path.basename(entry["file"]) if entry.get("file") else ""
         label = entry.get("label", basename)
 
-
         added   = len(report.get("added",    []))
         deleted = len(report.get("deleted",  []))
         modified = len(report.get("modified", []))
-        change_count = added + deleted + modified
+        file_changes = added + deleted + modified
+
+        # Determine app and network diffs for this report (check report or fallback to passed diffs for latest)
+        is_latest = bool(entries and entry == entries[-1])
+        rep_net = report.get("network_diff") or (network_diff if is_latest else None)
+        rep_app = report.get("app_diff") or (app_diff if is_latest else None)
+
+        net_changes = len(rep_net.get("modified_settings", {})) if (rep_net and isinstance(rep_net, dict)) else 0
+        app_changes = 0
+        if rep_app and isinstance(rep_app, dict):
+            app_changes = (
+                len(rep_app.get("added_apps", []))
+                + len(rep_app.get("removed_apps", []))
+                + len(rep_app.get("updated_apps", []))
+            )
+
+        change_count = file_changes + net_changes + app_changes
         exceeded = change_count > threshold
 
-
         is_baseline = not report.get("previous_snapshot")
-
 
         # Register in store
         if is_baseline:
@@ -550,18 +562,19 @@ def _compute_threshold_data(
                 except Exception:  # noqa: BLE001
                     pass
 
-
         if basename:
             reports_meta[basename] = {
                 "status": status,
                 "report_label": label,
                 "change_count": change_count,
+                "file_changes": file_changes,
+                "app_changes": app_changes,
+                "network_changes": net_changes,
                 "threshold_exceeded": exceeded,
                 "added": added,
                 "deleted": deleted,
                 "modified": modified,
             }
-
 
     return {"threshold": threshold, "reports": reports_meta}
 
@@ -572,6 +585,7 @@ def build_dashboard_html(
     network_data: Optional[Dict[str, Any]] = None,
     threshold_data: Optional[Dict[str, Any]] = None,
     network_diff: Optional[Dict[str, Any]] = None,
+    app_diff: Optional[Dict[str, Any]] = None,
 ) -> str:
     data_json = json.dumps(entries, sort_keys=True)
     # Defend against premature </script> termination if any monitored file's
@@ -579,10 +593,12 @@ def build_dashboard_html(
     data_json = data_json.replace("</", "<\\/")
     app_json = json.dumps(app_data or {}, sort_keys=True, default=str).replace("</", "<\\/")
     network_json = json.dumps(network_data or {}, sort_keys=True, default=str).replace("</", "<\\/")
-    # Merge network_diff into threshold_data so the UI can highlight changed rows.
+    # Merge network_diff and app_diff into threshold_data so the UI can highlight changed rows.
     _td = dict(threshold_data or {"threshold": 0, "reports": {}})
     if network_diff:
         _td["network_diff"] = network_diff
+    if app_diff:
+        _td["app_diff"] = app_diff
     threshold_json = json.dumps(_td, sort_keys=True).replace("</", "<\\/")
     rendered_at = datetime.now(IST).strftime("%d %b %Y, %H:%M IST")
 
@@ -749,6 +765,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--app-dir", help="Application directory to scan for the Application Snapshots tab (optional, e.g. /bin)")
     parser.add_argument("--network-snapshot", help="Path to a YAML network snapshot file (e.g. Output/config-snapshot.yaml written by collect_network_snapshot.sh) for the Network Settings tab (optional)")
     parser.add_argument("--network-diff", help="Path to a JSON file containing the network baseline diff (written by run_all.py). When present, changed network properties are highlighted in the dashboard.")
+    parser.add_argument("--app-diff", help="Path to a JSON file containing the application baseline diff (written by run_all.py). When present, changed application binaries/scripts are highlighted in the dashboard.")
     parser.add_argument("--version", action="version", version=f"visualize_report {SCRIPT_VERSION}")
     args = parser.parse_args(argv)
 
@@ -886,20 +903,29 @@ def main(argv: Optional[List[str]] = None) -> int:
 
 
 
+        # Application drift diff (optional): highlights changed binaries/scripts in UI.
+        app_diff: Optional[Dict[str, Any]] = None
+        if getattr(args, "app_diff", None) and os.path.isfile(args.app_diff):
+            try:
+                with open(args.app_diff, "r", encoding="utf-8") as _adf:
+                    app_diff = json.load(_adf)
+            except (OSError, json.JSONDecodeError):
+                pass
+
+        if entries:
+            if network_diff and "network_diff" not in entries[-1]["data"]:
+                entries[-1]["data"]["network_diff"] = network_diff
+            if app_diff and "app_diff" not in entries[-1]["data"]:
+                entries[-1]["data"]["app_diff"] = app_diff
+
         server_id_for_title = entries[-1]["data"].get("server_id", "unknown")
         title = args.title or f"Server Snapshot Dashboard - {server_id_for_title}"
 
-
-
-
-
-
-
-
         threshold_data = _compute_threshold_data(
-            entries, change_threshold, _approvals_dir, _this_server_id
+            entries, change_threshold, _approvals_dir, _this_server_id,
+            network_diff=network_diff, app_diff=app_diff
         )
-        html_out = build_dashboard_html(entries, title, app_data, network_data, threshold_data, network_diff)
+        html_out = build_dashboard_html(entries, title, app_data, network_data, threshold_data, network_diff, app_diff)
 
 
         if args.output:

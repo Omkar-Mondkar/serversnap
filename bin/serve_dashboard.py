@@ -671,10 +671,16 @@ class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
 
 
         try:
+            user = str(data.get("user", "")).strip() or "dashboard_user"
+            reason = str(data.get("reason", "")).strip() or (f"user_{action}d")
             if action == "approve":
-                success, message = handler.approve_changes(category, data.get("snapshot_data", {}))
+                success, message = handler.approve_changes(
+                    category, data.get("snapshot_data", {}), user=user, reason=reason
+                )
             else:
-                success, message = handler.reject_changes(category)
+                success, message = handler.reject_changes(
+                    category, user=user, reason=reason
+                )
             self._send_json({
                 "success": success,
                 "message": message,

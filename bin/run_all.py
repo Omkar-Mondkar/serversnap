@@ -342,10 +342,12 @@ Examples:
     dashboard_cmd = f"python3 {visualize_py} --config {config_file} --app-dir {app_dir}"
     
     _net_diff_json = project_root / "Output" / "network_diff.json"
+    _app_diff_json = project_root / "Output" / "app_diff.json"
+
+    # Pre-compute network baseline diff if baseline exists, so this run's dashboard includes live drift highlights
     if network_snapshot_yaml.exists() and not skip_network:
         dashboard_cmd += f" --network-snapshot {network_snapshot_yaml}"
         print_info(f"Including network settings from: {network_snapshot_yaml}")
-        # Pre-compute network baseline diff if baseline exists, so this run's dashboard includes live drift highlights
         if HAS_APPROVAL_SYSTEM:
             try:
                 sys.path.insert(0, str(script_dir))
@@ -371,12 +373,72 @@ Examples:
                 pass
     else:
         print_info("Network snapshot not available - dashboard will show drift + app tabs only")
-    
-    # If a network diff file exists, pass it so changed values are highlighted.
+
+    # Pre-compute application baseline diff if baseline exists
+    if app_dir and HAS_APPROVAL_SYSTEM:
+        try:
+            sys.path.insert(0, str(script_dir))
+            from baseline_manager import BaselineManager  # type: ignore
+            from visualize_report import analyze_configured_paths  # type: ignore
+            _bm = BaselineManager(server_id, str(project_root / "baselines"))
+            _curr_app = analyze_configured_paths(config_file)
+            _has_app_chg, _app_diff = _bm.compare_with_baseline("app", _curr_app)
+            if _has_app_chg:
+                _out_dir = project_root / "Output"
+                _out_dir.mkdir(parents=True, exist_ok=True)
+                _tmp_path = str(_app_diff_json) + ".tmp"
+                with open(_tmp_path, "w", encoding="utf-8") as _f:
+                    json.dump(_app_diff, _f, indent=2)
+                os.replace(_tmp_path, str(_app_diff_json))
+            else:
+                if _app_diff_json.exists():
+                    try:
+                        _app_diff_json.unlink()
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+    # Enrich latest report file with network_diff and app_diff if available
+    _rep_dir = config.get("report_dir", str(project_root / "reports"))
+    _rep_matches = sorted(glob.glob(os.path.join(_rep_dir, f"report_{server_id}_*.json")))
+    if _rep_matches:
+        try:
+            with open(_rep_matches[-1], "r", encoding="utf-8") as _rf:
+                _rep_data = json.load(_rf)
+            _rep_modified = False
+            if _net_diff_json.exists():
+                with open(_net_diff_json, "r", encoding="utf-8") as _nf:
+                    _rep_data["network_diff"] = json.load(_nf)
+                    _rep_modified = True
+            elif "network_diff" in _rep_data:
+                _rep_data.pop("network_diff", None)
+                _rep_modified = True
+
+            if _app_diff_json.exists():
+                with open(_app_diff_json, "r", encoding="utf-8") as _af:
+                    _rep_data["app_diff"] = json.load(_af)
+                    _rep_modified = True
+            elif "app_diff" in _rep_data:
+                _rep_data.pop("app_diff", None)
+                _rep_modified = True
+
+            if _rep_modified:
+                _tmp_rep = str(_rep_matches[-1]) + ".tmp"
+                with open(_tmp_rep, "w", encoding="utf-8") as _rf:
+                    json.dump(_rep_data, _rf, indent=2)
+                os.replace(_tmp_rep, _rep_matches[-1])
+        except Exception:
+            pass
+
+    # Pass network and app diffs if present
     if _net_diff_json.exists():
         dashboard_cmd += f" --network-diff {_net_diff_json}"
         print_info(f"Including network drift highlights from: {_net_diff_json}")
-    
+    if _app_diff_json.exists():
+        dashboard_cmd += f" --app-diff {_app_diff_json}"
+        print_info(f"Including application drift highlights from: {_app_diff_json}")
+
     print_info(f"Scanning app directory: {app_dir}")
     rc, out, err = run_command(dashboard_cmd, "Generating dashboard...")
    
@@ -431,7 +493,14 @@ Examples:
 
                 _summ      = _latest_rep.get("summary", {})
                 _has_chg   = bool(_summ.get("added") or _summ.get("deleted") or _summ.get("modified"))
-
+                if _latest_rep.get("app_diff"):
+                    _ad = _latest_rep["app_diff"]
+                    if _ad.get("added_apps") or _ad.get("removed_apps") or _ad.get("updated_apps"):
+                        _has_chg = True
+                if _latest_rep.get("network_diff"):
+                    _nd = _latest_rep["network_diff"]
+                    if _nd.get("modified_settings"):
+                        _has_chg = True
 
                 # Assemble minimal payload (mirrors push_to_platform in server_snapshot.py).
                 _payload: dict = {
@@ -449,6 +518,8 @@ Examples:
                         "deleted":  _latest_rep.get("deleted",  []),
                         "modified": _latest_rep.get("modified", []),
                     },
+                    "app_diff": _latest_rep.get("app_diff"),
+                    "network_diff": _latest_rep.get("network_diff"),
                     "snapshot": _latest_snap,
                 }
 
@@ -591,24 +662,26 @@ Examples:
                             changes_detected = True
                             approver.record_pending_changes(category, diff, datetime.now().isoformat())
                             print_info(f"⏳ Changes detected in {category} - pending approval")
-                            # Persist network diff so dashboard can highlight changed rows.
-                            if category == "network":
+                            # Persist network / app diff so dashboard can highlight changed rows.
+                            if category in ("network", "app"):
                                 try:
                                     _out_dir = project_root / "Output"
                                     _out_dir.mkdir(parents=True, exist_ok=True)
-                                    _ndiff_path = _out_dir / "network_diff.json"
-                                    _ndiff_tmp = str(_ndiff_path) + ".tmp"
-                                    with open(_ndiff_tmp, "w", encoding="utf-8") as _ndf:
-                                        json.dump(diff, _ndf, indent=2)
-                                    os.replace(_ndiff_tmp, str(_ndiff_path))
+                                    _diff_fname = "network_diff.json" if category == "network" else "app_diff.json"
+                                    _diff_path = _out_dir / _diff_fname
+                                    _diff_tmp = str(_diff_path) + ".tmp"
+                                    with open(_diff_tmp, "w", encoding="utf-8") as _df:
+                                        json.dump(diff, _df, indent=2)
+                                    os.replace(_diff_tmp, str(_diff_path))
                                 except Exception:
                                     pass
                         else:
-                            if category == "network":
+                            if category in ("network", "app"):
                                 try:
-                                    _ndiff_path = project_root / "Output" / "network_diff.json"
-                                    if _ndiff_path.exists():
-                                        _ndiff_path.unlink()
+                                    _diff_fname = "network_diff.json" if category == "network" else "app_diff.json"
+                                    _diff_path = project_root / "Output" / _diff_fname
+                                    if _diff_path.exists():
+                                        _diff_path.unlink()
                                 except Exception:
                                     pass
                

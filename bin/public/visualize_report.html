@@ -99,7 +99,8 @@
                 clip-rule="evenodd"
               />
             </svg>
-            Drift Reports</button
+            Drift Reports
+            <span class="tab-drift-badge" id="badge-reports" style="display: none;">0</span></button
           ><button class="tab-btn" data-tab="app" id="tab-app">
             <svg viewBox="0 0 20 20" fill="currentColor">
               <path
@@ -108,7 +109,8 @@
                 clip-rule="evenodd"
               />
             </svg>
-            App Snapshots</button
+            App Snapshots
+            <span class="tab-drift-badge" id="badge-app" style="display: none;">0</span></button
           ><button class="tab-btn" data-tab="network" id="tab-network">
             <svg viewBox="0 0 20 20" fill="currentColor">
               <path
@@ -117,7 +119,8 @@
                 clip-rule="evenodd"
               />
             </svg>
-            Network</button
+            Network
+            <span class="tab-drift-badge" id="badge-network" style="display: none;">0</span></button
           ><button class="tab-btn" data-tab="config" id="tab-config">
             <svg viewBox="0 0 20 20" fill="currentColor">
               <path
@@ -311,6 +314,20 @@
           </h2>
           <div id="modifiedList" class="modified-list"></div>
         </section>
+        <section id="appDriftReportSection" class="panel" style="display: none">
+          <h2 class="panel-title app-drift-title">
+            <span class="panel-dot dot-exec"></span>Application Snapshot Drift
+            <span id="appDriftReportCount" class="panel-count"></span>
+          </h2>
+          <div id="appDriftReportContent" class="drift-subcontent"></div>
+        </section>
+        <section id="networkDriftReportSection" class="panel" style="display: none">
+          <h2 class="panel-title network-drift-title">
+            <span class="panel-dot dot-link"></span>Network Configuration Drift
+            <span id="networkDriftReportCount" class="panel-count"></span>
+          </h2>
+          <div id="networkDriftReportContent" class="drift-subcontent"></div>
+        </section>
       </div>
       <div id="appView" class="tab-view" style="display: none">
         <div id="appNoData" class="empty-state" style="display: none">
@@ -336,6 +353,7 @@
           </p>
         </div>
         <div id="appContent">
+          <div id="appAuditContent"></div>
           <section class="meta-bar animate-in">
             <div class="meta-item">
               <span class="meta-label">Total Files</span
@@ -485,6 +503,7 @@
           </p>
         </div>
         <div id="networkContent">
+          <div id="netAuditContent"></div>
           <!-- Drift summary banner — shown only when network properties changed vs baseline -->
           <div id="netDriftBanner" class="net-drift-banner" style="display:none"></div>
           <div class="net-toolbar">

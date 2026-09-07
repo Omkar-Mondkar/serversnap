@@ -60,6 +60,17 @@
     reportCheckboxes: q("reportCheckboxes"),
     compareReportsToggle: q("compareReportsToggle"),
     searchFieldWrap: q("searchFieldWrap"),
+    badgeReports: q("badge-reports"),
+    badgeApp: q("badge-app"),
+    badgeNetwork: q("badge-network"),
+    appDriftReportSection: q("appDriftReportSection"),
+    appDriftReportCount: q("appDriftReportCount"),
+    appDriftReportContent: q("appDriftReportContent"),
+    networkDriftReportSection: q("networkDriftReportSection"),
+    networkDriftReportCount: q("networkDriftReportCount"),
+    networkDriftReportContent: q("networkDriftReportContent"),
+    appAuditContent: q("appAuditContent"),
+    netAuditContent: q("netAuditContent"),
   };
 
   /* ── Utils ───────────────────────────────────────────── */
@@ -299,8 +310,14 @@
       els.searchFieldWrap.style.display = name === "reports" ? "" : "none";
 
     if (name === "config") loadConfig();
-    if (name === "app") renderAppData();
-    if (name === "network") renderNetworkData();
+    if (name === "app") {
+      renderAppData();
+      renderAppAudit();
+    }
+    if (name === "network") {
+      renderNetworkData();
+      renderNetworkAudit();
+    }
   }
 
   document.getElementById("tabNav").addEventListener("click", function (e) {
@@ -739,7 +756,167 @@
       })
       .join("");
 
+    // App Drift section in Reports tab
+    var curAppDiff = {};
+    var curNetDiff = {};
+    if (indices.length === 1) {
+      var cr = reports[indices[0]].data || {};
+      curAppDiff = cr.app_diff || thresholdData.app_diff || {};
+      curNetDiff = cr.network_diff || thresholdData.network_diff || {};
+    } else {
+      curAppDiff = thresholdData.app_diff || {};
+      curNetDiff = thresholdData.network_diff || {};
+    }
+
+    var appAddedList = curAppDiff.added_apps || [];
+    var appRemovedList = curAppDiff.removed_apps || [];
+    var appUpdatedList = curAppDiff.updated_apps || [];
+    var appDriftCount = appAddedList.length + appRemovedList.length + appUpdatedList.length;
+
+    if (els.appDriftReportSection && els.appDriftReportContent) {
+      if (appDriftCount > 0) {
+        els.appDriftReportSection.style.display = "";
+        if (els.appDriftReportCount)
+          els.appDriftReportCount.textContent = "(" + appDriftCount + ")";
+        var appHtml = "";
+        if (appAddedList.length) {
+          appHtml +=
+            '<div class="drift-card-group"><div class="drift-card-header"><span class="status-pill approved">+ ' +
+            appAddedList.length +
+            " Added Binaries / Scripts</span></div>" +
+            '<ul class="path-list">' +
+            appAddedList
+              .map(function (item) {
+                var p =
+                  typeof item === "string"
+                    ? item
+                    : item.path || item.name || "";
+                var t =
+                  typeof item === "object"
+                    ? item.subtype || item.type || "file"
+                    : "file";
+                return (
+                  '<li><span class="type-badge">' +
+                  esc(t) +
+                  "</span><span>" +
+                  esc(p) +
+                  "</span></li>"
+                );
+              })
+              .join("") +
+            "</ul></div>";
+        }
+        if (appRemovedList.length) {
+          appHtml +=
+            '<div class="drift-card-group"><div class="drift-card-header"><span class="status-pill rejected">- ' +
+            appRemovedList.length +
+            " Removed Binaries / Scripts</span></div>" +
+            '<ul class="path-list">' +
+            appRemovedList
+              .map(function (item) {
+                var p =
+                  typeof item === "string"
+                    ? item
+                    : item.path || item.name || "";
+                var t =
+                  typeof item === "object"
+                    ? item.subtype || item.type || "file"
+                    : "file";
+                return (
+                  '<li><span class="type-badge">' +
+                  esc(t) +
+                  "</span><span>" +
+                  esc(p) +
+                  "</span></li>"
+                );
+              })
+              .join("") +
+            "</ul></div>";
+        }
+        if (appUpdatedList.length) {
+          appHtml +=
+            '<div class="drift-card-group"><div class="drift-card-header"><span class="status-pill" style="background: rgba(245, 158, 11, 0.2); color: #f59e0b;">~ ' +
+            appUpdatedList.length +
+            " Modified Binaries / Scripts</span></div>" +
+            '<ul class="path-list">' +
+            appUpdatedList
+              .map(function (item) {
+                var p = item.path || item.name || "";
+                var chg = (item.changes || []).join(", ");
+                return (
+                  '<li><span class="type-badge">modified</span><span>' +
+                  esc(p) +
+                  ' <small style="color:var(--text-dim);">(' +
+                  esc(chg) +
+                  ")</small></span></li>"
+                );
+              })
+              .join("") +
+            "</ul></div>";
+        }
+        els.appDriftReportContent.innerHTML = appHtml;
+      } else {
+        els.appDriftReportSection.style.display = "none";
+        els.appDriftReportContent.innerHTML = "";
+      }
+    }
+
+    // Network Drift section in Reports tab
+    var netModifiedMap = curNetDiff.modified_settings || {};
+    var netKeys = Object.keys(netModifiedMap);
+    var netDriftCount = netKeys.length;
+
+    if (els.networkDriftReportSection && els.networkDriftReportContent) {
+      if (netDriftCount > 0) {
+        els.networkDriftReportSection.style.display = "";
+        if (els.networkDriftReportCount)
+          els.networkDriftReportCount.textContent = "(" + netDriftCount + ")";
+        var netHtml =
+          '<div class="drift-card-group"><div class="drift-card-header"><span class="status-pill" style="background: rgba(239, 68, 68, 0.2); color: #ef4444;">' +
+          netDriftCount +
+          " Changed Network Properties</span></div>" +
+          '<div class="table-wrap"><table class="network-table"><thead><tr><th>Property</th><th>Category</th><th>Baseline Value</th><th>Current Value</th></tr></thead><tbody>';
+        netKeys.forEach(function (k) {
+          var item = netModifiedMap[k] || {};
+          var secName = item.section || "General";
+          var oldV =
+            item.old !== null && item.old !== undefined
+              ? String(item.old)
+              : "— (none)";
+          var newV =
+            item.new !== null && item.new !== undefined
+              ? String(item.new)
+              : "— (deleted)";
+          netHtml +=
+            '<tr><td class="mono font-semibold">' +
+            esc(k) +
+            '</td><td><span class="net-pill-type">' +
+            esc(secName) +
+            '</span></td><td class="mono text-muted">' +
+            esc(oldV) +
+            '</td><td class="mono" style="color:var(--red); font-weight:600;">' +
+            esc(newV) +
+            "</td></tr>";
+        });
+        netHtml += "</tbody></table></div></div>";
+        els.networkDriftReportContent.innerHTML = netHtml;
+      } else {
+        els.networkDriftReportSection.style.display = "none";
+        els.networkDriftReportContent.innerHTML = "";
+      }
+    }
+
+    var hasChanges =
+      allAdded.length +
+        allDeleted.length +
+        allModified.length +
+        appDriftCount +
+        netDriftCount >
+      0;
+    els.emptyState.style.display = hasChanges ? "none" : "";
+
     applySearchFilter();
+    updateTabBadges();
   }
 
   function renderReportComparison(indices) {
@@ -1514,8 +1691,16 @@
     }
     var report = reports[indices[0]].data || {};
     var summary = report.summary || {};
-    var changeCount =
+    var fileChanges =
       (summary.added || 0) + (summary.deleted || 0) + (summary.modified || 0);
+    var rApp = report.app_diff || thresholdData.app_diff || {};
+    var appChanges =
+      (rApp.added_apps || []).length +
+      (rApp.removed_apps || []).length +
+      (rApp.updated_apps || []).length;
+    var rNet = report.network_diff || thresholdData.network_diff || {};
+    var netChanges = Object.keys(rNet.modified_settings || {}).length;
+    var changeCount = fileChanges + appChanges + netChanges;
     var snapshot = snapshotIdForReport(reports[indices[0]]);
     if (!changeCount) {
       els.driftAuditContent.innerHTML = "";
@@ -1665,6 +1850,465 @@
         renderAuditHistory(d.history);
         showToast("Snapshot " + action + " recorded", "success");
         if (selectedIndices.length === 1) renderDriftAudit(selectedIndices);
+        updateTabBadges();
+      })
+      .catch(function (e) {
+        showToast(e.message, "error");
+      });
+  }
+
+  /* ── Tab Badges & Baseline Deciders (App & Network) ───── */
+  function updateTabBadges() {
+    var repCount = 0;
+    if (selectedIndices && selectedIndices.length === 1) {
+      var r = reports[selectedIndices[0]].data || {};
+      var s = r.summary || {};
+      var fc = (s.added || 0) + (s.deleted || 0) + (s.modified || 0);
+      var rApp = r.app_diff || thresholdData.app_diff || {};
+      var ac =
+        (rApp.added_apps || []).length +
+        (rApp.removed_apps || []).length +
+        (rApp.updated_apps || []).length;
+      var rNet = r.network_diff || thresholdData.network_diff || {};
+      var nc = Object.keys(rNet.modified_settings || {}).length;
+      repCount = fc + ac + nc;
+    } else if (selectedIndices && selectedIndices.length > 1) {
+      selectedIndices.forEach(function (idx) {
+        var r = reports[idx].data || {};
+        var s = r.summary || {};
+        repCount += (s.added || 0) + (s.deleted || 0) + (s.modified || 0);
+      });
+    } else if (reports.length > 0) {
+      var lastR = reports[reports.length - 1].data || {};
+      var s = lastR.summary || {};
+      var fc = (s.added || 0) + (s.deleted || 0) + (s.modified || 0);
+      var rApp = lastR.app_diff || thresholdData.app_diff || {};
+      var ac =
+        (rApp.added_apps || []).length +
+        (rApp.removed_apps || []).length +
+        (rApp.updated_apps || []).length;
+      var rNet = lastR.network_diff || thresholdData.network_diff || {};
+      var nc = Object.keys(rNet.modified_settings || {}).length;
+      repCount = fc + ac + nc;
+    }
+    var bRep = q("badge-reports");
+    if (bRep) {
+      if (repCount > 0) {
+        bRep.textContent = repCount;
+        bRep.style.display = "inline-flex";
+      } else {
+        bRep.style.display = "none";
+      }
+    }
+
+    var appDiff = (thresholdData && thresholdData.app_diff) || {};
+    if (
+      !appDiff.category &&
+      reports.length &&
+      reports[reports.length - 1].data.app_diff
+    ) {
+      appDiff = reports[reports.length - 1].data.app_diff;
+    }
+    var appTotal =
+      (appDiff.added_apps || []).length +
+      (appDiff.removed_apps || []).length +
+      (appDiff.updated_apps || []).length;
+    var bApp = q("badge-app");
+    if (bApp) {
+      if (appTotal > 0) {
+        bApp.textContent = appTotal;
+        bApp.style.display = "inline-flex";
+      } else {
+        bApp.style.display = "none";
+      }
+    }
+
+    var netDiff = (thresholdData && thresholdData.network_diff) || {};
+    if (
+      !netDiff.category &&
+      reports.length &&
+      reports[reports.length - 1].data.network_diff
+    ) {
+      netDiff = reports[reports.length - 1].data.network_diff;
+    }
+    var netTotal = Object.keys(netDiff.modified_settings || {}).length;
+    var bNet = q("badge-network");
+    if (bNet) {
+      if (netTotal > 0) {
+        bNet.textContent = netTotal;
+        bNet.style.display = "inline-flex";
+      } else {
+        bNet.style.display = "none";
+      }
+    }
+  }
+
+  function renderAppAudit() {
+    var cont = q("appAuditContent");
+    if (!cont) return;
+    var appDiff = (thresholdData && thresholdData.app_diff) || {};
+    if (
+      !appDiff.category &&
+      reports.length &&
+      reports[reports.length - 1].data.app_diff
+    ) {
+      appDiff = reports[reports.length - 1].data.app_diff;
+    }
+    var added = (appDiff.added_apps || []).length;
+    var removed = (appDiff.removed_apps || []).length;
+    var updated = (appDiff.updated_apps || []).length;
+    var totalAppChanges = added + removed + updated;
+
+    if (!totalAppChanges) {
+      cont.innerHTML = "";
+      return;
+    }
+
+    var sid = _serverIdFromCentralPath();
+    var statusUrl = sid ? "/api/server/" + sid + "/status" : "/api/status";
+
+    fetch(statusUrl)
+      .then(function (r) {
+        if (!r.ok) throw new Error();
+        return r.json();
+      })
+      .then(function (data) {
+        var catStatus = (data.categories && data.categories.app) || {};
+        var isApproved = catStatus.status === "approved";
+        var isRejected = catStatus.status === "rejected";
+
+        if (isApproved || isRejected) {
+          var statusDot = isApproved ? "dot-added" : "dot-deleted";
+          var statusBadge = isApproved
+            ? "status-pill approved"
+            : "status-pill rejected";
+          cont.innerHTML =
+            '<section class="panel audit-panel">' +
+            '<h2 class="panel-title"><span class="panel-dot ' +
+            statusDot +
+            '"></span>Application Baseline Decision Recorded</h2>' +
+            '<div class="audit-body">' +
+            '<div class="audit-decision-row">' +
+            '<span class="' +
+            statusBadge +
+            '">' +
+            (isApproved ? "&#10003; APPROVED" : "&#10007; REJECTED") +
+            "</span>" +
+            '<span class="audit-decision-meta">' +
+            (catStatus.timestamp
+              ? " &bull; " + esc(formatDate(catStatus.timestamp))
+              : "") +
+            "</span>" +
+            "</div>" +
+            "</div>" +
+            "</section>";
+        } else {
+          cont.innerHTML =
+            '<section class="panel audit-panel">' +
+            '<h2 class="panel-title"><span class="panel-dot dot-alert"></span>Pending Application Baseline Approval</h2>' +
+            '<div class="audit-body">' +
+            '<p class="audit-caption"><span class="audit-warn-count">' +
+            totalAppChanges +
+            " detected binary/script change(s)</span> vs approved baseline (" +
+            added +
+            " added, " +
+            removed +
+            " removed, " +
+            updated +
+            " updated)</p>" +
+            '<div class="config-form audit-controls">' +
+            '<div class="form-group">' +
+            '<label for="appApprover">Approver Name <span class="req">*</span></label>' +
+            '<input type="text" id="appApprover" autocomplete="name" placeholder="e.g. John Doe / Team Lead" required>' +
+            "</div>" +
+            '<div class="form-group">' +
+            '<label for="appReason">Reason / Ticket Note <span class="req">*</span></label>' +
+            '<input type="text" id="appReason" placeholder="e.g. Approved binary upgrade / Ticket #1234" required>' +
+            "</div>" +
+            "</div>" +
+            '<div class="config-actions audit-actions">' +
+            '<button type="button" id="rejectAppBaselineBtn" class="btn btn-secondary btn-reject-alt">&#10007; Reject Changes</button>' +
+            '<button type="button" id="approveAppBaselineBtn" class="btn btn-primary btn-approve-alt">&#10003; Approve and Update Baseline</button>' +
+            "</div>" +
+            "</div>" +
+            "</section>";
+
+          var btnApprove = q("approveAppBaselineBtn");
+          if (btnApprove) {
+            btnApprove.addEventListener("click", function () {
+              var user = (
+                q("appApprover") ? q("appApprover").value : ""
+              ).trim();
+              var reason = (q("appReason") ? q("appReason").value : "").trim();
+              decideCategoryBaseline("app", "approve", appData, user, reason);
+            });
+          }
+          var btnReject = q("rejectAppBaselineBtn");
+          if (btnReject) {
+            btnReject.addEventListener("click", function () {
+              var user = (
+                q("appApprover") ? q("appApprover").value : ""
+              ).trim();
+              var reason = (q("appReason") ? q("appReason").value : "").trim();
+              decideCategoryBaseline("app", "reject", {}, user, reason);
+            });
+          }
+        }
+      })
+      .catch(function () {
+        cont.innerHTML =
+          '<section class="panel audit-panel">' +
+          '<h2 class="panel-title"><span class="panel-dot dot-alert"></span>Pending Application Baseline Approval</h2>' +
+          '<div class="audit-body">' +
+          '<p class="audit-caption"><span class="audit-warn-count">' +
+          totalAppChanges +
+          " detected binary/script change(s)</span> vs approved baseline</p>" +
+          '<div class="config-form audit-controls">' +
+          '<div class="form-group">' +
+          '<label for="appApprover">Approver Name <span class="req">*</span></label>' +
+          '<input type="text" id="appApprover" autocomplete="name" placeholder="e.g. John Doe / Team Lead" required>' +
+          "</div>" +
+          '<div class="form-group">' +
+          '<label for="appReason">Reason / Ticket Note <span class="req">*</span></label>' +
+          '<input type="text" id="appReason" placeholder="e.g. Approved binary upgrade / Ticket #1234" required>' +
+          "</div>" +
+          "</div>" +
+          '<div class="config-actions audit-actions">' +
+          '<button type="button" id="rejectAppBaselineBtn" class="btn btn-secondary btn-reject-alt">&#10007; Reject Changes</button>' +
+          '<button type="button" id="approveAppBaselineBtn" class="btn btn-primary btn-approve-alt">&#10003; Approve and Update Baseline</button>' +
+          "</div>" +
+          "</div>" +
+          "</section>";
+        var btnApprove = q("approveAppBaselineBtn");
+        if (btnApprove) {
+          btnApprove.addEventListener("click", function () {
+            var user = (q("appApprover") ? q("appApprover").value : "").trim();
+            var reason = (q("appReason") ? q("appReason").value : "").trim();
+            decideCategoryBaseline("app", "approve", appData, user, reason);
+          });
+        }
+        var btnReject = q("rejectAppBaselineBtn");
+        if (btnReject) {
+          btnReject.addEventListener("click", function () {
+            var user = (q("appApprover") ? q("appApprover").value : "").trim();
+            var reason = (q("appReason") ? q("appReason").value : "").trim();
+            decideCategoryBaseline("app", "reject", {}, user, reason);
+          });
+        }
+      });
+  }
+
+  function renderNetworkAudit() {
+    var cont = q("netAuditContent");
+    if (!cont) return;
+    var netDiff = (thresholdData && thresholdData.network_diff) || {};
+    if (
+      !netDiff.category &&
+      reports.length &&
+      reports[reports.length - 1].data.network_diff
+    ) {
+      netDiff = reports[reports.length - 1].data.network_diff;
+    }
+    var totalNetChanges = Object.keys(netDiff.modified_settings || {}).length;
+
+    if (!totalNetChanges) {
+      cont.innerHTML = "";
+      return;
+    }
+
+    var sid = _serverIdFromCentralPath();
+    var statusUrl = sid ? "/api/server/" + sid + "/status" : "/api/status";
+
+    fetch(statusUrl)
+      .then(function (r) {
+        if (!r.ok) throw new Error();
+        return r.json();
+      })
+      .then(function (data) {
+        var catStatus = (data.categories && data.categories.network) || {};
+        var isApproved = catStatus.status === "approved";
+        var isRejected = catStatus.status === "rejected";
+
+        if (isApproved || isRejected) {
+          var statusDot = isApproved ? "dot-added" : "dot-deleted";
+          var statusBadge = isApproved
+            ? "status-pill approved"
+            : "status-pill rejected";
+          cont.innerHTML =
+            '<section class="panel audit-panel">' +
+            '<h2 class="panel-title"><span class="panel-dot ' +
+            statusDot +
+            '"></span>Network Baseline Decision Recorded</h2>' +
+            '<div class="audit-body">' +
+            '<div class="audit-decision-row">' +
+            '<span class="' +
+            statusBadge +
+            '">' +
+            (isApproved ? "&#10003; APPROVED" : "&#10007; REJECTED") +
+            "</span>" +
+            '<span class="audit-decision-meta">' +
+            (catStatus.timestamp
+              ? " &bull; " + esc(formatDate(catStatus.timestamp))
+              : "") +
+            "</span>" +
+            "</div>" +
+            "</div>" +
+            "</section>";
+        } else {
+          cont.innerHTML =
+            '<section class="panel audit-panel">' +
+            '<h2 class="panel-title"><span class="panel-dot dot-alert"></span>Pending Network Baseline Approval</h2>' +
+            '<div class="audit-body">' +
+            '<p class="audit-caption"><span class="audit-warn-count">' +
+            totalNetChanges +
+            " detected network configuration change(s)</span> vs approved baseline</p>" +
+            '<div class="config-form audit-controls">' +
+            '<div class="form-group">' +
+            '<label for="netApprover">Approver Name <span class="req">*</span></label>' +
+            '<input type="text" id="netApprover" autocomplete="name" placeholder="e.g. John Doe / Team Lead" required>' +
+            "</div>" +
+            '<div class="form-group">' +
+            '<label for="netReason">Reason / Ticket Note <span class="req">*</span></label>' +
+            '<input type="text" id="netReason" placeholder="e.g. Scheduled network maintenance / Ticket #1234" required>' +
+            "</div>" +
+            "</div>" +
+            '<div class="config-actions audit-actions">' +
+            '<button type="button" id="rejectNetBaselineBtn" class="btn btn-secondary btn-reject-alt">&#10007; Reject Changes</button>' +
+            '<button type="button" id="approveNetBaselineBtn" class="btn btn-primary btn-approve-alt">&#10003; Approve and Update Baseline</button>' +
+            "</div>" +
+            "</div>" +
+            "</section>";
+
+          var btnApprove = q("approveNetBaselineBtn");
+          if (btnApprove) {
+            btnApprove.addEventListener("click", function () {
+              var user = (
+                q("netApprover") ? q("netApprover").value : ""
+              ).trim();
+              var reason = (q("netReason") ? q("netReason").value : "").trim();
+              decideCategoryBaseline(
+                "network",
+                "approve",
+                networkData,
+                user,
+                reason,
+              );
+            });
+          }
+          var btnReject = q("rejectNetBaselineBtn");
+          if (btnReject) {
+            btnReject.addEventListener("click", function () {
+              var user = (
+                q("netApprover") ? q("netApprover").value : ""
+              ).trim();
+              var reason = (q("netReason") ? q("netReason").value : "").trim();
+              decideCategoryBaseline("network", "reject", {}, user, reason);
+            });
+          }
+        }
+      })
+      .catch(function () {
+        cont.innerHTML =
+          '<section class="panel audit-panel">' +
+          '<h2 class="panel-title"><span class="panel-dot dot-alert"></span>Pending Network Baseline Approval</h2>' +
+          '<div class="audit-body">' +
+          '<p class="audit-caption"><span class="audit-warn-count">' +
+          totalNetChanges +
+          " detected network configuration change(s)</span> vs approved baseline</p>" +
+          '<div class="config-form audit-controls">' +
+          '<div class="form-group">' +
+          '<label for="netApprover">Approver Name <span class="req">*</span></label>' +
+          '<input type="text" id="netApprover" autocomplete="name" placeholder="e.g. John Doe / Team Lead" required>' +
+          "</div>" +
+          '<div class="form-group">' +
+          '<label for="netReason">Reason / Ticket Note <span class="req">*</span></label>' +
+          '<input type="text" id="netReason" placeholder="e.g. Scheduled network maintenance / Ticket #1234" required>' +
+          "</div>" +
+          "</div>" +
+          '<div class="config-actions audit-actions">' +
+          '<button type="button" id="rejectNetBaselineBtn" class="btn btn-secondary btn-reject-alt">&#10007; Reject Changes</button>' +
+          '<button type="button" id="approveNetBaselineBtn" class="btn btn-primary btn-approve-alt">&#10003; Approve and Update Baseline</button>' +
+          "</div>" +
+          "</div>" +
+          "</section>";
+        var btnApprove = q("approveNetBaselineBtn");
+        if (btnApprove) {
+          btnApprove.addEventListener("click", function () {
+            var user = (q("netApprover") ? q("netApprover").value : "").trim();
+            var reason = (q("netReason") ? q("netReason").value : "").trim();
+            decideCategoryBaseline(
+              "network",
+              "approve",
+              networkData,
+              user,
+              reason,
+            );
+          });
+        }
+        var btnReject = q("rejectNetBaselineBtn");
+        if (btnReject) {
+          btnReject.addEventListener("click", function () {
+            var user = (q("netApprover") ? q("netApprover").value : "").trim();
+            var reason = (q("netReason") ? q("netReason").value : "").trim();
+            decideCategoryBaseline("network", "reject", {}, user, reason);
+          });
+        }
+      });
+  }
+
+  function decideCategoryBaseline(
+    category,
+    action,
+    snapshotData,
+    user,
+    reason,
+  ) {
+    if (!user || !reason) {
+      showToast("Approver name and reason are required", "error");
+      return;
+    }
+    var sid = _serverIdFromCentralPath();
+    var url = sid ? "/api/server/" + sid + "/" + action : "/api/" + action;
+
+    fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        category: category,
+        snapshot_data: snapshotData,
+        user: user,
+        reason: reason,
+      }),
+    })
+      .then(function (r) {
+        return r.json().then(function (d) {
+          if (!r.ok)
+            throw new Error(d.error || category + " " + action + " failed");
+          return d;
+        });
+      })
+      .then(function (d) {
+        showToast(
+          (category === "app" ? "Application" : "Network") +
+            " baseline " +
+            action +
+            "d successfully",
+          "success",
+        );
+        if (category === "app") {
+          renderAppAudit();
+          if (action === "approve") {
+            if (thresholdData.app_diff) thresholdData.app_diff = {};
+          }
+        } else if (category === "network") {
+          renderNetworkAudit();
+          if (action === "approve") {
+            if (thresholdData.network_diff) thresholdData.network_diff = {};
+            var banner = q("netDriftBanner");
+            if (banner) banner.style.display = "none";
+          }
+        }
+        updateTabBadges();
       })
       .catch(function (e) {
         showToast(e.message, "error");
@@ -2116,6 +2760,10 @@
     updateTriggerText();
     renderMultiple(selectedIndices);
   }
+
+  updateTabBadges();
+  renderAppAudit();
+  renderNetworkAudit();
 
   fetchReportStatus();
   setInterval(fetchReportStatus, 30000);
