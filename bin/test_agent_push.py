@@ -42,6 +42,7 @@ from server_snapshot import push_to_platform, Config
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _config(platform=None, report_dir=None, server_id="web01") -> Config:
     return Config(
         server_id=server_id,
@@ -70,7 +71,9 @@ def _report(added=1, deleted=0, modified=2):
     return {"summary": {"added": added, "deleted": deleted, "modified": modified}}
 
 
-def _platform_cfg(url="http://central:8090/api/ingest", api_key="key123", push_always=True):
+def _platform_cfg(
+    url="http://central:8090/api/ingest", api_key="key123", push_always=True
+):
     return {"url": url, "api_key": api_key, "push_always": push_always}
 
 
@@ -92,8 +95,8 @@ class FakeHTTPResponse:
 # Tests
 # ===========================================================================
 
-class TestPushToPlatformSkipLogic(unittest.TestCase):
 
+class TestPushToPlatformSkipLogic(unittest.TestCase):
     def test_no_push_when_platform_not_configured(self):
         """Empty platform dict => silent no-op, no HTTP call."""
         cfg = _config(platform={})
@@ -123,14 +126,18 @@ class TestPushToPlatformSkipLogic(unittest.TestCase):
     def test_push_always_false_has_changes_sends(self):
         """push_always=False but has_changes=True => send."""
         cfg = _config(platform=_platform_cfg(push_always=False))
-        with patch("urllib.request.urlopen", return_value=FakeHTTPResponse(200)) as mock_open:
+        with patch(
+            "urllib.request.urlopen", return_value=FakeHTTPResponse(200)
+        ) as mock_open:
             push_to_platform(cfg, _snapshot(), _report(), has_changes=True)
         mock_open.assert_called_once()
 
     def test_push_always_true_no_changes_sends(self):
         """push_always=True and has_changes=False => still send."""
         cfg = _config(platform=_platform_cfg(push_always=True))
-        with patch("urllib.request.urlopen", return_value=FakeHTTPResponse(200)) as mock_open:
+        with patch(
+            "urllib.request.urlopen", return_value=FakeHTTPResponse(200)
+        ) as mock_open:
             push_to_platform(cfg, _snapshot(), _report(), has_changes=False)
         mock_open.assert_called_once()
 
@@ -138,13 +145,14 @@ class TestPushToPlatformSkipLogic(unittest.TestCase):
         """push_always missing from config defaults to True => always sends."""
         platform = {"url": "http://central:8090/api/ingest", "api_key": "k"}
         cfg = _config(platform=platform)
-        with patch("urllib.request.urlopen", return_value=FakeHTTPResponse(200)) as mock_open:
+        with patch(
+            "urllib.request.urlopen", return_value=FakeHTTPResponse(200)
+        ) as mock_open:
             push_to_platform(cfg, _snapshot(), _report(), has_changes=False)
         mock_open.assert_called_once()
 
 
 class TestPushToPlatformPayload(unittest.TestCase):
-
     def _capture_request(self, cfg, has_changes=True):
         """Return the Request object passed to urlopen."""
         captured = []
@@ -203,7 +211,6 @@ class TestPushToPlatformPayload(unittest.TestCase):
 
 
 class TestPushToPlatformDashboardHTML(unittest.TestCase):
-
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
 
@@ -247,7 +254,9 @@ class TestPushToPlatformDashboardHTML(unittest.TestCase):
     def test_push_still_succeeds_without_dashboard(self):
         """Absence of dashboard HTML must not block the push."""
         cfg = _config(platform=_platform_cfg(), report_dir=self.tmp)
-        with patch("urllib.request.urlopen", return_value=FakeHTTPResponse(200)) as mock_open:
+        with patch(
+            "urllib.request.urlopen", return_value=FakeHTTPResponse(200)
+        ) as mock_open:
             # No exception raised
             push_to_platform(cfg, _snapshot(), _report(), has_changes=True)
         mock_open.assert_called_once()
@@ -269,14 +278,12 @@ class TestPushToPlatformErrorHandling(unittest.TestCase):
         self._run(urllib.error.URLError("connection refused"))
 
     def test_http_error_500_non_fatal(self):
-        self._run(urllib.error.HTTPError(
-            "http://x", 500, "Internal Server Error", {}, None
-        ))
+        self._run(
+            urllib.error.HTTPError("http://x", 500, "Internal Server Error", {}, None)
+        )
 
     def test_http_error_401_non_fatal(self):
-        self._run(urllib.error.HTTPError(
-            "http://x", 401, "Unauthorized", {}, None
-        ))
+        self._run(urllib.error.HTTPError("http://x", 401, "Unauthorized", {}, None))
 
     def test_os_error_non_fatal(self):
         self._run(OSError("network unreachable"))
@@ -302,7 +309,9 @@ class TestPushToPlatformErrorHandling(unittest.TestCase):
             cfg = _config(platform=_platform_cfg(), report_dir=tmp, server_id="web01")
             # Mock open to simulate read failure
             with patch("builtins.open", side_effect=OSError("read error")):
-                with patch("urllib.request.urlopen", return_value=FakeHTTPResponse(200)):
+                with patch(
+                    "urllib.request.urlopen", return_value=FakeHTTPResponse(200)
+                ):
                     try:
                         push_to_platform(cfg, _snapshot(), _report(), has_changes=True)
                     except Exception as exc:

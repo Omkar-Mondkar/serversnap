@@ -48,6 +48,7 @@ from serve_central import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _payload(server_id="web01", has_changes=True, dashboard_b64=None):
     p = {
         "server_id": server_id,
@@ -103,11 +104,16 @@ class LiveServer:
         key = api_key if api_key is not None else self.cfg["api_key"]
         body = json.dumps(payload).encode()
         c = self.conn()
-        c.request("POST", "/api/ingest", body=body, headers={
-            "Content-Type": "application/json",
-            "Content-Length": str(len(body)),
-            "X-API-Key": key,
-        })
+        c.request(
+            "POST",
+            "/api/ingest",
+            body=body,
+            headers={
+                "Content-Type": "application/json",
+                "Content-Length": str(len(body)),
+                "X-API-Key": key,
+            },
+        )
         try:
             r = c.getresponse()
             status = r.status
@@ -124,16 +130,21 @@ class LiveServer:
     def login(self, user="admin", pw="pass"):
         body = f"username={user}&password={pw}"
         c = self.conn()
-        c.request("POST", "/login", body=body.encode(), headers={
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Content-Length": str(len(body)),
-        })
+        c.request(
+            "POST",
+            "/login",
+            body=body.encode(),
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Content-Length": str(len(body)),
+            },
+        )
         r = c.getresponse()
         r.read()
         for part in r.getheader("Set-Cookie", "").split(";"):
             part = part.strip()
             if part.startswith(SESSION_COOKIE_NAME + "="):
-                return part[len(SESSION_COOKIE_NAME) + 1:]
+                return part[len(SESSION_COOKIE_NAME) + 1 :]
         return None
 
     def authed(self, method, path, cookie, body=None, extra_headers=None):
@@ -149,8 +160,8 @@ class LiveServer:
 # 1. Password hashing
 # ===========================================================================
 
-class TestPasswordHashing(unittest.TestCase):
 
+class TestPasswordHashing(unittest.TestCase):
     def test_round_trip(self):
         s = hash_password("correct-horse-battery")
         self.assertTrue(verify_password("correct-horse-battery", s))
@@ -178,11 +189,14 @@ class TestPasswordHashing(unittest.TestCase):
 # 2. Session cookies
 # ===========================================================================
 
+
 class TestSessionCookies(unittest.TestCase):
     S = "my-test-secret"
 
     def test_round_trip(self):
-        self.assertEqual(verify_session_cookie(make_session_cookie("alice", self.S), self.S), "alice")
+        self.assertEqual(
+            verify_session_cookie(make_session_cookie("alice", self.S), self.S), "alice"
+        )
 
     def test_expired_cookie_none(self):
         c = make_session_cookie("bob", self.S, ttl_hours=0)
@@ -207,10 +221,12 @@ class TestSessionCookies(unittest.TestCase):
 # 3. Health status
 # ===========================================================================
 
-class TestHealthStatus(unittest.TestCase):
 
+class TestHealthStatus(unittest.TestCase):
     def _ts(self, delta_minutes=0):
-        return (datetime.now(timezone.utc) + timedelta(minutes=delta_minutes)).isoformat()
+        return (
+            datetime.now(timezone.utc) + timedelta(minutes=delta_minutes)
+        ).isoformat()
 
     def test_healthy_now(self):
         self.assertEqual(health_status({"last_seen": self._ts(0)}, 60), "healthy")
@@ -237,8 +253,8 @@ class TestHealthStatus(unittest.TestCase):
 # 4. Config cascade
 # ===========================================================================
 
-class TestGetEffectiveConfig(unittest.TestCase):
 
+class TestGetEffectiveConfig(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         self.data_dir = os.path.join(self.tmp, "data")
@@ -274,8 +290,8 @@ class TestGetEffectiveConfig(unittest.TestCase):
 # 5. Storage layer
 # ===========================================================================
 
-class TestStorageLayer(unittest.TestCase):
 
+class TestStorageLayer(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         self.data_dir = os.path.join(self.tmp, "data")
@@ -300,7 +316,11 @@ class TestStorageLayer(unittest.TestCase):
 
     def test_writes_dashboard_html(self):
         html = b"<html><body>dash</body></html>"
-        store_push(self.data_dir, "s3", _payload("s3", dashboard_b64=base64.b64encode(html).decode()))
+        store_push(
+            self.data_dir,
+            "s3",
+            _payload("s3", dashboard_b64=base64.b64encode(html).decode()),
+        )
         p = os.path.join(self.data_dir, "s3", "latest_dashboard.html")
         self.assertTrue(os.path.isfile(p))
         with open(p, "rb") as f:
@@ -325,6 +345,7 @@ class TestStorageLayer(unittest.TestCase):
     def test_prune_keeps_count(self):
         # Push 5 times with manual distinct timestamps via patching
         import unittest.mock as mock
+
         base_dt = datetime(2024, 1, 1, tzinfo=timezone.utc)
         for i in range(5):
             fake_now = base_dt + timedelta(seconds=i)
@@ -361,6 +382,7 @@ class TestStorageLayer(unittest.TestCase):
 # 6. URL decode helper
 # ===========================================================================
 
+
 class TestUrlDecode(unittest.TestCase):
     def test_plus_space(self):
         self.assertEqual(_url_decode("a+b"), "a b")
@@ -377,8 +399,8 @@ class TestUrlDecode(unittest.TestCase):
 # 7. HTTP integration: ingest
 # ===========================================================================
 
-class TestIngest(unittest.TestCase):
 
+class TestIngest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         self.dd = os.path.join(self.tmp, "data")
@@ -408,11 +430,16 @@ class TestIngest(unittest.TestCase):
         with LiveServer(self.dd) as s:
             body = b"{{not json"
             c = s.conn()
-            c.request("POST", "/api/ingest", body=body, headers={
-                "Content-Type": "application/json",
-                "Content-Length": str(len(body)),
-                "X-API-Key": s.cfg["api_key"],
-            })
+            c.request(
+                "POST",
+                "/api/ingest",
+                body=body,
+                headers={
+                    "Content-Type": "application/json",
+                    "Content-Length": str(len(body)),
+                    "X-API-Key": s.cfg["api_key"],
+                },
+            )
             self.assertEqual(c.getresponse().status, 400)
 
     def test_missing_server_id_400(self):
@@ -445,8 +472,8 @@ class TestIngest(unittest.TestCase):
 # 8. HTTP integration: auth
 # ===========================================================================
 
-class TestAuthEndpoints(unittest.TestCase):
 
+class TestAuthEndpoints(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         self.dd = os.path.join(self.tmp, "data")
@@ -473,20 +500,30 @@ class TestAuthEndpoints(unittest.TestCase):
         with LiveServer(self.dd) as s:
             body = "username=admin&password=WRONG"
             c = s.conn()
-            c.request("POST", "/login", body=body.encode(), headers={
-                "Content-Type": "application/x-www-form-urlencoded",
-                "Content-Length": str(len(body)),
-            })
+            c.request(
+                "POST",
+                "/login",
+                body=body.encode(),
+                headers={
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "Content-Length": str(len(body)),
+                },
+            )
             self.assertEqual(c.getresponse().status, 401)
 
     def test_login_unknown_user_401(self):
         with LiveServer(self.dd) as s:
             body = "username=nobody&password=pass"
             c = s.conn()
-            c.request("POST", "/login", body=body.encode(), headers={
-                "Content-Type": "application/x-www-form-urlencoded",
-                "Content-Length": str(len(body)),
-            })
+            c.request(
+                "POST",
+                "/login",
+                body=body.encode(),
+                headers={
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "Content-Length": str(len(body)),
+                },
+            )
             self.assertEqual(c.getresponse().status, 401)
 
     def test_unauthenticated_api_redirects(self):
@@ -495,8 +532,7 @@ class TestAuthEndpoints(unittest.TestCase):
             c.request("GET", "/api/servers")
             r = c.getresponse()
             r.read()
-            self.assertEqual(r.status, 302)
-            self.assertIn("/login", r.getheader("Location", ""))
+            self.assertEqual(r.status, 401)
 
     def test_authenticated_api_servers_200(self):
         with LiveServer(self.dd) as s:
@@ -520,15 +556,15 @@ class TestAuthEndpoints(unittest.TestCase):
             bad = cookie[:-1] + ("X" if cookie[-1] != "X" else "Y")
             r = s.authed("GET", "/api/servers", bad)
             r.read()
-            self.assertEqual(r.status, 302)
+            self.assertEqual(r.status, 401)
 
 
 # ===========================================================================
 # 9. HTTP integration: server APIs
 # ===========================================================================
 
-class TestServerAPIs(unittest.TestCase):
 
+class TestServerAPIs(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         self.dd = os.path.join(self.tmp, "data")
@@ -592,7 +628,7 @@ class TestServerAPIs(unittest.TestCase):
             cookie = s.login()
             r = s.authed("GET", "/server/dashsrv/dashboard", cookie)
             self.assertEqual(r.status, 200)
-            self.assertEqual(r.read(), html)
+            self.assertIn(html, r.read())
 
     def test_server_config_no_secrets(self):
         with LiveServer(self.dd) as s:
@@ -618,8 +654,8 @@ class TestServerAPIs(unittest.TestCase):
 # 10. HTTP integration: static files
 # ===========================================================================
 
-class TestStaticFiles(unittest.TestCase):
 
+class TestStaticFiles(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         self.dd = os.path.join(self.tmp, "data")

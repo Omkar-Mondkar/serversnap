@@ -41,6 +41,7 @@
       </div>
     </header>
 
+
     <!-- ============================================================
        MAIN — two views: grid (home) and detail
   ============================================================ -->
@@ -67,6 +68,7 @@
           </div>
         </div>
 
+
         <!-- Empty state -->
         <div id="empty-state" class="empty-state" hidden>
           <div class="empty-state__icon" aria-hidden="true">📡</div>
@@ -77,6 +79,7 @@
           </p>
         </div>
 
+
         <!-- Card grid -->
         <div
           class="card-grid"
@@ -85,6 +88,7 @@
           aria-label="Server cards"
         ></div>
       </section>
+
 
       <!-- ── DETAIL VIEW ────────────────────────────────── -->
       <section id="view-detail" class="view" hidden aria-label="Server detail">
@@ -106,6 +110,7 @@
           </a>
         </div>
 
+
         <div class="detail-header" id="detail-header">
           <div class="detail-header__meta">
             <h1 class="detail-header__id" id="detail-server-id">—</h1>
@@ -119,8 +124,10 @@
           </div>
         </div>
 
+
         <!-- Change summary chips -->
         <div class="change-chips" id="change-chips"></div>
+
 
         <!-- Changed files list -->
         <div class="detail-section">
@@ -128,11 +135,13 @@
           <div id="changed-files-list" class="files-list" role="list"></div>
         </div>
 
+
         <!-- Snapshot metadata -->
         <div class="detail-section">
           <h2 class="detail-section__title">Snapshot Metadata</h2>
           <dl class="meta-grid" id="snapshot-meta"></dl>
         </div>
+
 
         <!-- Report approval history -->
         <div class="detail-section">
@@ -146,6 +155,7 @@
       </section>
     </main>
 
+
     <!-- Loading overlay -->
     <div
       id="loading-overlay"
@@ -156,9 +166,12 @@
       <div class="spinner"></div>
     </div>
 
+
     <!-- Toast notification -->
     <div id="toast" class="toast" role="alert" aria-live="assertive"></div>
+
 
     <script src="/central.js"></script>
   </body>
 </html>
+

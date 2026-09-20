@@ -1,105 +1,6 @@
-// (function () {
-//   "use strict";
-
-//   /* ── Data ────────────────────────────────────────────── */
-//   var reports = JSON.parse(
-//     document.getElementById("report-data").textContent || "[]",
-//   );
-//   var appData = JSON.parse(
-//     (document.getElementById("app-data") || { textContent: "{}" })
-//       .textContent || "{}",
-//   );
-//   var networkData = JSON.parse(
-//     (document.getElementById("network-data") || { textContent: "{}" })
-//       .textContent || "{}",
-//   );
-//   var thresholdData = JSON.parse(
-//     (document.getElementById("threshold-data") || { textContent: "{}" })
-//       .textContent || "{}",
-//   );
-//   var selectedIndices = [];
-//   var configData = null;
-//   var editingPathIdx = -1;
-
-//   /* ── Element cache ───────────────────────────────────── */
-//   function q(id) {
-//     return document.getElementById(id);
-//   }
-//   var els = {
-//     subtitle: q("subtitle"),
-//     metaServerId: q("metaServerId"),
-//     metaHostname: q("metaHostname"),
-//     metaGenerated: q("metaGenerated"),
-//     metaPrev: q("metaPrev"),
-//     metaCurr: q("metaCurr"),
-//     countAdded: q("countAdded"),
-//     countDeleted: q("countDeleted"),
-//     countModified: q("countModified"),
-//     countUnchanged: q("countUnchanged"),
-//     segAdded: document.querySelector(".seg-added"),
-//     segDeleted: document.querySelector(".seg-deleted"),
-//     segModified: document.querySelector(".seg-modified"),
-//     segUnchanged: document.querySelector(".seg-unchanged"),
-//     driftTopContent: q("driftTopContent"),
-//     driftAuditContent: q("driftAuditContent"),
-//     emptyState: q("emptyState"),
-//     addedSection: q("addedSection"),
-//     deletedSection: q("deletedSection"),
-//     modifiedSection: q("modifiedSection"),
-//     addedList: q("addedList"),
-//     deletedList: q("deletedList"),
-//     modifiedList: q("modifiedList"),
-//     addedTitleCount: q("addedTitleCount"),
-//     deletedTitleCount: q("deletedTitleCount"),
-//     modifiedTitleCount: q("modifiedTitleCount"),
-//     searchBox: q("searchBox"),
-//     themeToggle: q("themeToggle"),
-//     reportTrigger: q("reportTrigger"),
-//     reportDropdown: q("reportDropdown"),
-//     reportSelectedText: q("reportSelectedText"),
-//     reportCheckboxes: q("reportCheckboxes"),
-//     compareReportsToggle: q("compareReportsToggle"),
-//     searchFieldWrap: q("searchFieldWrap"),
-//   };
-
-//   /* ── Utils ───────────────────────────────────────────── */
-//   function esc(s) {
-//     var d = document.createElement("div");
-//     d.textContent = s == null ? "" : String(s);
-//     return d.innerHTML;
-//   }
-
-//   function animateCount(el, target) {
-//     var start = 0;
-//     var duration = 500;
-//     var startTime = null;
-//     function step(ts) {
-//       if (!startTime) startTime = ts;
-//       var progress = Math.min((ts - startTime) / duration, 1);
-//       var ease = 1 - Math.pow(1 - progress, 3);
-//       el.textContent = Math.round(ease * target);
-//       if (progress < 1) requestAnimationFrame(step);
-//     }
-//     requestAnimationFrame(step);
-//   }
-
-//   function showToast(msg, type) {
-//     var c = q("toastContainer");
-//     var t = document.createElement("div");
-//     t.className = "toast toast-" + (type || "info");
-//     t.textContent = msg;
-//     c.appendChild(t);
-//     setTimeout(function () {
-//       t.style.opacity = "0";
-//       t.style.transform = "translateX(30px) scale(0.9)";
-//       t.style.transition = "all .25s ease";
-//       setTimeout(function () {
-//         if (t.parentNode) t.parentNode.removeChild(t);
-//       }, 280);
-//     }, 3200);
-//   }
 (function () {
   "use strict";
+
 
   /* ── Data ────────────────────────────────────────────── */
   var reports = JSON.parse(
@@ -120,6 +21,7 @@
   var selectedIndices = [];
   var configData = null;
   var editingPathIdx = -1;
+
 
   /* ── Element cache ───────────────────────────────────── */
   function q(id) {
@@ -160,7 +62,21 @@
     reportCheckboxes: q("reportCheckboxes"),
     compareReportsToggle: q("compareReportsToggle"),
     searchFieldWrap: q("searchFieldWrap"),
+    badgeReports: q("badge-reports"),
+    badgeFiles: q("badge-files"),
+    badgeApp: q("badge-app"),
+    badgeNetwork: q("badge-network"),
+    filesEmptyState: q("filesEmptyState"),
+    appDriftReportSection: q("appDriftReportSection"),
+    appDriftReportCount: q("appDriftReportCount"),
+    appDriftReportContent: q("appDriftReportContent"),
+    networkDriftReportSection: q("networkDriftReportSection"),
+    networkDriftReportCount: q("networkDriftReportCount"),
+    networkDriftReportContent: q("networkDriftReportContent"),
+    appAuditContent: q("appAuditContent"),
+    netAuditContent: q("netAuditContent"),
   };
+
 
   /* ── Utils ───────────────────────────────────────────── */
   function esc(s) {
@@ -168,6 +84,7 @@
     d.textContent = s == null ? "" : String(s);
     return d.innerHTML;
   }
+
 
   function animateCount(el, target) {
     var start = 0;
@@ -182,6 +99,7 @@
     }
     requestAnimationFrame(step);
   }
+
 
   function showToast(msg, type) {
     var c = q("toastContainer");
@@ -198,6 +116,323 @@
       }, 280);
     }, 3200);
   }
+
+
+  function formatBytes(b) {
+    var u = ["B", "KB", "MB", "GB"];
+    var s = b;
+    var i = 0;
+    while (s >= 1024 && i < u.length - 1) {
+      s /= 1024;
+      i++;
+    }
+    return s.toFixed(1) + " " + u[i];
+  }
+
+
+  function formatDate(iso) {
+    if (!iso) return "—";
+    try {
+      var s = String(iso).trim();
+      if (/^\d{4}_\d{2}_\d{2}/.test(s)) {
+        s = s
+          .replace(/^(\d{4})_(\d{2})_(\d{2})/, "$1-$2-$3")
+          .replace(/T(\d{2})_(\d{2})_(\d{2})/, "T$1:$2:$3")
+          .replace(/([+-]\d{2})_(\d{2})$/, "$1:$2");
+      }
+      var d = new Date(s.replace(" ", "T"));
+      if (isNaN(d.getTime())) return iso;
+      return (
+        d.toLocaleString("en-IN", {
+          timeZone: "Asia/Kolkata",
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        }) + " IST"
+      );
+    } catch (e) {
+      return iso || "—";
+    }
+  }
+
+
+  function formatEntityName(name) {
+    if (!name) return "";
+    var filename = name.split("/").pop().split("\\").pop();
+    var ext = "";
+    var dotIdx = filename.lastIndexOf(".");
+    var stem = filename;
+    if (dotIdx !== -1) {
+      stem = filename.slice(0, dotIdx);
+      ext = filename.slice(dotIdx);
+    }
+    var preMatch = stem.match(
+      /^(report|snapshot|latest_report|latest_snapshot)_(.+)$/i,
+    );
+    if (!preMatch) return filename;
+    var prefix = preMatch[1];
+    var remainder = preMatch[2];
+
+
+    // 1. Check for ISO-like timestamp: e.g. web01_2026_09_05T18_27_35.165669+00_00
+    var isoMatch = remainder.match(
+      /^(.*?)_?(\d{4}[-_]\d{2}[-_]\d{2}T\d{2}[_:]\d{2}[_:]\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}[_:]?\d{2})?)$/i,
+    );
+    if (isoMatch) {
+      var sid = isoMatch[1] || "";
+      var rawIso = isoMatch[2];
+      var normIso = rawIso
+        .replace(/^(\d{4})_(\d{2})_(\d{2})/, "$1-$2-$3")
+        .replace(/T(\d{2})_(\d{2})_(\d{2})/, "T$1:$2:$3")
+        .replace(/([+-]\d{2})_(\d{2})$/, "$1:$2");
+      var d = new Date(normIso);
+      if (!isNaN(d.getTime())) {
+        var parts = new Intl.DateTimeFormat("en-GB", {
+          timeZone: "Asia/Kolkata",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        }).formatToParts(d);
+        var p = {};
+        parts.forEach(function (x) {
+          p[x.type] = x.value;
+        });
+        var tsStr =
+          p.year + "_" + p.month + "_" + p.day + "_" + p.hour + "_" + p.minute;
+        return (sid ? prefix + "_" + sid : prefix) + "_" + tsStr + ext;
+      }
+    }
+
+
+    // 2. Check for underscore-separated format: web01_2026_09_05_18_27_35 or web01_2026_09_05_23_57
+    var stdMatch = remainder.match(
+      /^(.*?)_?(\d{4})_(\d{2})_(\d{2})_(\d{2})_(\d{2})(?:_(\d{2}))?(?:_(\d+))?$/,
+    );
+    if (stdMatch) {
+      var sid2 = stdMatch[1] || "";
+      var y = parseInt(stdMatch[2], 10);
+      var mo = parseInt(stdMatch[3], 10) - 1;
+      var day = parseInt(stdMatch[4], 10);
+      var hr = parseInt(stdMatch[5], 10);
+      var min = parseInt(stdMatch[6], 10);
+      var sec =
+        stdMatch[7] !== undefined ? parseInt(stdMatch[7], 10) : undefined;
+      var counter = stdMatch[8] ? "_" + stdMatch[8] : "";
+
+
+      if (sec !== undefined) {
+        var utcDate = new Date(Date.UTC(y, mo, day, hr, min, sec));
+        var p2 = {};
+        new Intl.DateTimeFormat("en-GB", {
+          timeZone: "Asia/Kolkata",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        })
+          .formatToParts(utcDate)
+          .forEach(function (x) {
+            p2[x.type] = x.value;
+          });
+        var tsStr2 =
+          p2.year +
+          "_" +
+          p2.month +
+          "_" +
+          p2.day +
+          "_" +
+          p2.hour +
+          "_" +
+          p2.minute;
+        return (
+          (sid2 ? prefix + "_" + sid2 : prefix) + "_" + tsStr2 + counter + ext
+        );
+      } else {
+        var tsStr3 =
+          stdMatch[2] +
+          "_" +
+          stdMatch[3] +
+          "_" +
+          stdMatch[4] +
+          "_" +
+          stdMatch[5] +
+          "_" +
+          stdMatch[6];
+        return (
+          (sid2 ? prefix + "_" + sid2 : prefix) + "_" + tsStr3 + counter + ext
+        );
+      }
+    }
+
+
+    return filename;
+  }
+
+
+  /* ── Theme ───────────────────────────────────────────── */
+  var THEME_KEY = "snp_theme";
+  function applyTheme(t) {
+    document.documentElement.setAttribute("data-theme", t);
+    q("iconDark").style.display = t === "dark" ? "" : "none";
+    q("iconLight").style.display = t === "light" ? "" : "none";
+  }
+  els.themeToggle.addEventListener("click", function () {
+    var next =
+      document.documentElement.getAttribute("data-theme") === "dark"
+        ? "light"
+        : "dark";
+    applyTheme(next);
+    try {
+      localStorage.setItem(THEME_KEY, next);
+    } catch (e) {}
+  });
+  var saved = null;
+  try {
+    saved = localStorage.getItem(THEME_KEY);
+  } catch (e) {}
+  applyTheme(saved || "dark");
+
+
+  /* ── Tab switching ───────────────────────────────────── */
+  var TAB_IDS = ["approval", "config", "audit"];
+  var TARGET_IDS = ["report", "files", "snapshot", "network"];
+  // Maps a toggle target onto the pre-existing view container it renders into.
+  var TARGET_VIEWS = {
+    report: "reportsView",
+    files: "filesView",
+    snapshot: "appView",
+    network: "networkView",
+  };
+  var currentTarget = "report";
+
+
+  function switchTab(name) {
+    TAB_IDS.forEach(function (id) {
+      var view = q(id + "View");
+      var btn = q("tab-" + id);
+      if (!view || !btn) return;
+      var active = id === name;
+      view.style.display = active ? "" : "none";
+      view.classList.toggle("active-view", active);
+      btn.classList.toggle("active", active);
+    });
+
+
+    if (name === "config") loadConfig();
+    if (name === "audit") renderAuditPipeline();
+    if (name === "approval") switchTarget(currentTarget);
+
+    var topbarShortcuts = q("topbarShortcuts");
+    if (topbarShortcuts) {
+      topbarShortcuts.style.display = name === "approval" ? "" : "none";
+    }
+  }
+
+
+  function switchTarget(name) {
+    if (TARGET_IDS.indexOf(name) === -1) name = "report";
+    currentTarget = name;
+
+
+    TARGET_IDS.forEach(function (id) {
+      var view = q(TARGET_VIEWS[id]);
+      if (!view) return;
+      var active = id === name;
+      view.style.display = active ? "" : "none";
+      view.classList.toggle("active-view", active);
+    });
+
+
+    Array.prototype.forEach.call(
+      document.querySelectorAll(".seg-toggle__btn"),
+      function (b) {
+        b.setAttribute("aria-pressed", String(b.dataset.target === name));
+      },
+    );
+
+
+    /* The path filter only applies to the file-drift changes tab. */
+    if (els.searchFieldWrap)
+      els.searchFieldWrap.style.display = name === "files" ? "" : "none";
+
+
+    /* Requirement 2: After switching tabs, dont show the tab bar overall approvals inputs */
+    var showTabBarApprovals = name === "report";
+    var barActions = q("tabBarApprovalActions");
+    var barTarget = q("tabBarDecisionTarget");
+    if (barActions) barActions.style.display = showTabBarApprovals ? "" : "none";
+    if (barTarget) barTarget.style.display = showTabBarApprovals ? "" : "none";
+
+
+    if (name === "files") {
+      renderDriftAudit();
+    }
+    if (name === "snapshot") {
+      renderAppData();
+      renderAppAudit();
+    }
+    if (name === "network") {
+      renderNetworkData();
+      renderNetworkAudit();
+    }
+    updateApprovalBar();
+  }
+
+
+  document.getElementById("tabNav").addEventListener("click", function (e) {
+    var btn = e.target.closest(".tab-btn");
+    if (btn) switchTab(btn.dataset.tab);
+  });
+
+
+  var _targetToggle = q("targetToggle");
+  if (_targetToggle) {
+    _targetToggle.addEventListener("click", function (e) {
+      var btn = e.target.closest(".seg-toggle__btn");
+      if (btn) switchTarget(btn.dataset.target);
+    });
+  }
+
+
+  /* ── Multi-select dropdown ───────────────────────────── */
+  function populateMultiSelect() {
+    els.reportCheckboxes.innerHTML = reports
+      .map(function (r, i) {
+        var basename = r.file ? r.file.split("/").pop().split("\\").pop() : "";
+        var rMeta = (thresholdData.reports || {})[basename];
+        var badgeHtml = "";
+        if (rMeta && rMeta.threshold_exceeded && rMeta.status === "pending") {
+          badgeHtml =
+            ' <span class="warning-badge" title="' +
+            esc(rMeta.report_label) +
+            '">⚠</span>';
+        }
+        return (
+          '<label class="ms-option">' +
+          '<input type="checkbox" value="' +
+          i +
+          '">' +
+          '<span class="ms-option-label" title="' +
+          esc(r.label) +
+          '">' +
+          esc(r.label) +
+          badgeHtml +
+          "</span>" +
+          "</label>"
+        );
+      })
+      .join("");
+  }
+
+
   function getSelectedIndices() {
     var out = [];
     els.reportCheckboxes
@@ -207,7 +442,6 @@
       });
     return out;
   }
-
   function updateTriggerText() {
     var n = selectedIndices.length;
     if (n === 0) els.reportSelectedText.textContent = "Select reports\u2026";
@@ -218,9 +452,11 @@
     else els.reportSelectedText.textContent = n + " reports selected";
   }
 
+
   function comparisonMode() {
     return els.compareReportsToggle && els.compareReportsToggle.checked;
   }
+
 
   function selectOnly(index) {
     els.reportCheckboxes
@@ -230,6 +466,7 @@
       });
     selectedIndices = getSelectedIndices();
   }
+
 
   els.reportTrigger.addEventListener("click", function (e) {
     e.stopPropagation();
@@ -285,6 +522,7 @@
     if (selectedIndices.length) renderMultiple(selectedIndices);
   });
 
+
   /* ── Diff rendering ──────────────────────────────────── */
   function renderDiffLines(lines) {
     return (lines || [])
@@ -295,34 +533,52 @@
         else if (line.startsWith("@@")) cls += " diff-hunk";
         else if (line.startsWith("+")) cls += " diff-add";
         else if (line.startsWith("-")) cls += " diff-del";
-        return (
-          '<div class="' +
-          cls +
-          '">' +
-          esc(line.replace(/\\\\n$/, "")) +
-          "</div>"
+        var cleaned = line.replace(/\\n$/, "");
+        cleaned = cleaned.replace(
+          /(\d{4}[-_]\d{2}[-_]\d{2}[T ]\d{2}[:_]\d{2}[:_]\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}[:_]?\d{2})?)/g,
+          function (m) {
+            return formatDate(m);
+          },
         );
+        return '<div class="' + cls + '">' + esc(cleaned) + "</div>";
       })
       .join("");
   }
+
+
+  function formatFieldValue(key, val) {
+    if (val === null || val === undefined) return "—";
+    if (
+      key === "mtime" ||
+      key === "ctime" ||
+      (typeof val === "string" &&
+        /^\d{4}[-_]\d{2}[-_]\d{2}[T ]\d{2}[:_]\d{2}/.test(val))
+    ) {
+      return formatDate(val);
+    }
+    return String(val);
+  }
+
+
   function fieldRows(changes) {
     return Object.keys(changes || {})
       .map(function (k) {
-        var v = changes[k];
+        var v = changes[k] || {};
         return (
           '<tr><td class="field-name">' +
           esc(k) +
           "</td>" +
           '<td class="val-old">' +
-          esc(v.old) +
+          esc(formatFieldValue(k, v.old)) +
           "</td>" +
           '<td class="val-new">' +
-          esc(v["new"]) +
+          esc(formatFieldValue(k, v["new"])) +
           "</td></tr>"
         );
       })
       .join("");
   }
+
 
   /* ── Drift reports render ────────────────────────────── */
   function renderMultiple(indices) {
@@ -340,6 +596,7 @@
       genAts = [];
     // var showBadge = comparisonMode() && indices.length > 1;
     var showBadge = indices.length > 1;
+
 
     indices.forEach(function (i) {
       var entry = reports[i];
@@ -367,6 +624,7 @@
       if (r.generated_at) genAts.push(r.generated_at);
     });
 
+
     var pendingExceeded = [];
     indices.forEach(function (i) {
       var entry = reports[i];
@@ -374,11 +632,18 @@
       var basename = entry.file
         ? entry.file.split("/").pop().split("\\").pop()
         : "";
+      var isBase = !(entry.data && entry.data.previous_snapshot);
       var rMeta = (thresholdData.reports || {})[basename];
-      if (rMeta && rMeta.threshold_exceeded && rMeta.status === "pending") {
+      if (
+        rMeta &&
+        !isBase &&
+        rMeta.threshold_exceeded &&
+        rMeta.status === "pending"
+      ) {
         pendingExceeded.push(rMeta.report_label);
       }
     });
+
 
     var topHtml = "";
     if (pendingExceeded.length > 0) {
@@ -416,7 +681,7 @@
         var statusHtml = "";
         if (rMeta.status === "pending") {
           statusHtml =
-            '<span class="status-pill">Use the baseline approval panel below</span>';
+            '<span class="status-pill">Pending &mdash; decide from the bar above</span>';
         } else if (rMeta.status === "approved") {
           statusHtml =
             '<span class="status-pill approved">&#10003; Approved</span>';
@@ -424,6 +689,7 @@
           statusHtml =
             '<span class="status-pill rejected">&#10007; Rejected</span>';
         }
+
 
         var excText = rMeta.threshold_exceeded
           ? " (⚠ Threshold exceeded: " +
@@ -458,20 +724,24 @@
     if (els.driftTopContent) els.driftTopContent.innerHTML = topHtml;
     renderDriftAudit(indices);
 
+
     els.metaServerId.textContent = Object.keys(serverIds).join(", ") || "—";
     els.metaHostname.textContent = Object.keys(hostnames).join(", ") || "—";
     // if (indices.length === 1 && !comparisonMode()) {
     if (indices.length === 1) {
       var sr = reports[indices[0]].data;
-      els.metaGenerated.textContent = sr.generated_at || "—";
-      els.metaPrev.textContent =
-        sr.previous_snapshot || "(none — baseline run)";
-      els.metaCurr.textContent = sr.current_snapshot || "—";
+      els.metaGenerated.textContent = formatDate(sr.generated_at);
+      els.metaPrev.textContent = sr.previous_snapshot
+        ? formatEntityName(sr.previous_snapshot)
+        : "(none — baseline run)";
+      els.metaCurr.textContent = sr.current_snapshot
+        ? formatEntityName(sr.current_snapshot)
+        : "—";
       els.subtitle.textContent = reports[indices[0]].label;
     } else {
       genAts.sort();
       els.metaGenerated.textContent =
-        (genAts[0] || "?") + " → " + (genAts[genAts.length - 1] || "?");
+        formatDate(genAts[0]) + " → " + formatDate(genAts[genAts.length - 1]);
       els.metaPrev.textContent = "(" + indices.length + " reports selected)";
       els.metaCurr.textContent = "(" + indices.length + " reports selected)";
       els.subtitle.textContent = comparisonMode()
@@ -479,10 +749,12 @@
         : indices.length + " reports selected";
     }
 
+
     animateCount(els.countAdded, allAdded.length);
     animateCount(els.countDeleted, allDeleted.length);
     animateCount(els.countModified, allModified.length);
     animateCount(els.countUnchanged, totalUnchanged);
+
 
     var total =
       allAdded.length + allDeleted.length + allModified.length + totalUnchanged;
@@ -494,16 +766,20 @@
     els.segModified.style.width = pct(allModified.length);
     els.segUnchanged.style.width = pct(totalUnchanged);
 
-    var hasChanges =
+
+    var hasFileChanges =
       allAdded.length + allDeleted.length + allModified.length > 0;
-    els.emptyState.style.display = hasChanges ? "none" : "";
+    if (els.filesEmptyState)
+      els.filesEmptyState.style.display = hasFileChanges ? "none" : "";
     els.addedSection.style.display = allAdded.length ? "" : "none";
     els.deletedSection.style.display = allDeleted.length ? "" : "none";
     els.modifiedSection.style.display = allModified.length ? "" : "none";
 
+
     els.addedTitleCount.textContent = "(" + allAdded.length + ")";
     els.deletedTitleCount.textContent = "(" + allDeleted.length + ")";
     els.modifiedTitleCount.textContent = "(" + allModified.length + ")";
+
 
     function listItem(item) {
       var badge = showBadge
@@ -529,6 +805,7 @@
     }
     els.addedList.innerHTML = allAdded.map(listItem).join("");
     els.deletedList.innerHTML = allDeleted.map(listItem).join("");
+
 
     els.modifiedList.innerHTML = allModified
       .map(function (item, mi) {
@@ -575,8 +852,177 @@
       })
       .join("");
 
+
+    // App Drift section in Reports tab
+    var curAppDiff = {};
+    var curNetDiff = {};
+    if (indices.length === 1) {
+      var cr = reports[indices[0]].data || {};
+      curAppDiff = cr.app_diff || thresholdData.app_diff || {};
+      curNetDiff = cr.network_diff || thresholdData.network_diff || {};
+    } else {
+      curAppDiff = thresholdData.app_diff || {};
+      curNetDiff = thresholdData.network_diff || {};
+    }
+
+
+    var appAddedList = curAppDiff.added_apps || [];
+    var appRemovedList = curAppDiff.removed_apps || [];
+    var appUpdatedList = curAppDiff.updated_apps || [];
+    var appDriftCount =
+      appAddedList.length + appRemovedList.length + appUpdatedList.length;
+
+
+    if (els.appDriftReportSection && els.appDriftReportContent) {
+      if (appDriftCount > 0) {
+        els.appDriftReportSection.style.display = "";
+        if (els.appDriftReportCount)
+          els.appDriftReportCount.textContent = "(" + appDriftCount + ")";
+        var appHtml = "";
+        if (appAddedList.length) {
+          appHtml +=
+            '<div class="drift-card-group"><div class="drift-card-header"><span class="status-pill approved">+ ' +
+            appAddedList.length +
+            " Added Binaries / Scripts</span></div>" +
+            '<ul class="path-list">' +
+            appAddedList
+              .map(function (item) {
+                var p =
+                  typeof item === "string"
+                    ? item
+                    : item.path || item.name || "";
+                var t =
+                  typeof item === "object"
+                    ? item.subtype || item.type || "file"
+                    : "file";
+                return (
+                  '<li><span class="type-badge">' +
+                  esc(t) +
+                  "</span><span>" +
+                  esc(p) +
+                  "</span></li>"
+                );
+              })
+              .join("") +
+            "</ul></div>";
+        }
+        if (appRemovedList.length) {
+          appHtml +=
+            '<div class="drift-card-group"><div class="drift-card-header"><span class="status-pill rejected">- ' +
+            appRemovedList.length +
+            " Removed Binaries / Scripts</span></div>" +
+            '<ul class="path-list">' +
+            appRemovedList
+              .map(function (item) {
+                var p =
+                  typeof item === "string"
+                    ? item
+                    : item.path || item.name || "";
+                var t =
+                  typeof item === "object"
+                    ? item.subtype || item.type || "file"
+                    : "file";
+                return (
+                  '<li><span class="type-badge">' +
+                  esc(t) +
+                  "</span><span>" +
+                  esc(p) +
+                  "</span></li>"
+                );
+              })
+              .join("") +
+            "</ul></div>";
+        }
+        if (appUpdatedList.length) {
+          appHtml +=
+            '<div class="drift-card-group"><div class="drift-card-header"><span class="status-pill" style="background: rgba(245, 158, 11, 0.2); color: #f59e0b;">~ ' +
+            appUpdatedList.length +
+            " Modified Binaries / Scripts</span></div>" +
+            '<ul class="path-list">' +
+            appUpdatedList
+              .map(function (item) {
+                var p = item.path || item.name || "";
+                var chg = (item.changes || []).join(", ");
+                return (
+                  '<li><span class="type-badge">modified</span><span>' +
+                  esc(p) +
+                  ' <small style="color:var(--text-dim);">(' +
+                  esc(chg) +
+                  ")</small></span></li>"
+                );
+              })
+              .join("") +
+            "</ul></div>";
+        }
+        els.appDriftReportContent.innerHTML = appHtml;
+      } else {
+        els.appDriftReportSection.style.display = "none";
+        els.appDriftReportContent.innerHTML = "";
+      }
+    }
+
+
+    // Network Drift section in Reports tab
+    var netModifiedMap = curNetDiff.modified_settings || {};
+    var netKeys = Object.keys(netModifiedMap);
+    var netDriftCount = netKeys.length;
+
+
+    if (els.networkDriftReportSection && els.networkDriftReportContent) {
+      if (netDriftCount > 0) {
+        els.networkDriftReportSection.style.display = "";
+        if (els.networkDriftReportCount)
+          els.networkDriftReportCount.textContent = "(" + netDriftCount + ")";
+        var netHtml =
+          '<div class="drift-card-group"><div class="drift-card-header"><span class="status-pill" style="background: rgba(239, 68, 68, 0.2); color: #ef4444;">' +
+          netDriftCount +
+          " Changed Network Properties</span></div>" +
+          '<div class="table-wrap"><table class="network-table"><thead><tr><th>Property</th><th>Category</th><th>Baseline Value</th><th>Current Value</th></tr></thead><tbody>';
+        netKeys.forEach(function (k) {
+          var item = netModifiedMap[k] || {};
+          var secName = item.section || "General";
+          var oldV =
+            item.old !== null && item.old !== undefined
+              ? String(item.old)
+              : "— (none)";
+          var newV =
+            item.new !== null && item.new !== undefined
+              ? String(item.new)
+              : "— (deleted)";
+          netHtml +=
+            '<tr><td class="mono font-semibold">' +
+            esc(k) +
+            '</td><td><span class="net-pill-type">' +
+            esc(secName) +
+            '</span></td><td class="mono text-muted">' +
+            esc(oldV) +
+            '</td><td class="mono" style="color:var(--red); font-weight:600;">' +
+            esc(newV) +
+            "</td></tr>";
+        });
+        netHtml += "</tbody></table></div></div>";
+        els.networkDriftReportContent.innerHTML = netHtml;
+      } else {
+        els.networkDriftReportSection.style.display = "none";
+        els.networkDriftReportContent.innerHTML = "";
+      }
+    }
+
+
+    var hasChanges =
+      allAdded.length +
+        allDeleted.length +
+        allModified.length +
+        appDriftCount +
+        netDriftCount >
+      0;
+    els.emptyState.style.display = hasChanges ? "none" : "";
+
+
     applySearchFilter();
+    updateTabBadges();
   }
+
 
   function renderReportComparison(indices) {
     els.driftAuditContent.innerHTML = "";
@@ -608,12 +1054,6 @@
           return data.report;
         });
       })
-      .then(function (r) {
-        return r.json().then(function (data) {
-          if (!r.ok) throw new Error(data.error || "Report comparison failed");
-          return data.report;
-        });
-      })
       .then(function (report) {
         var summary = report.summary || {};
         var added = report.added || [];
@@ -627,9 +1067,11 @@
           "</strong></div></div>";
         els.metaServerId.textContent = report.server_id || "-";
         els.metaHostname.textContent = report.hostname || "-";
-        els.metaGenerated.textContent = targetEntry.data.generated_at || "-";
-        els.metaPrev.textContent = baseId;
-        els.metaCurr.textContent = targetId;
+        els.metaGenerated.textContent = targetEntry.data.generated_at
+          ? formatDate(targetEntry.data.generated_at)
+          : "-";
+        els.metaPrev.textContent = formatEntityName(baseId);
+        els.metaCurr.textContent = formatEntityName(targetId);
         els.subtitle.textContent = "Comparison view";
         animateCount(els.countAdded, added.length);
         animateCount(els.countDeleted, deleted.length);
@@ -647,8 +1089,10 @@
         els.segDeleted.style.width = pct(deleted.length);
         els.segModified.style.width = pct(modified.length);
         els.segUnchanged.style.width = pct(summary.unchanged || 0);
-        els.emptyState.style.display =
-          added.length || deleted.length || modified.length ? "none" : "";
+        var hasFileDiffs = added.length || deleted.length || modified.length;
+        els.emptyState.style.display = hasFileDiffs ? "none" : "";
+        if (els.filesEmptyState)
+          els.filesEmptyState.style.display = hasFileDiffs ? "none" : "";
         els.addedSection.style.display = added.length ? "" : "none";
         els.deletedSection.style.display = deleted.length ? "" : "none";
         els.modifiedSection.style.display = modified.length ? "" : "none";
@@ -695,11 +1139,13 @@
       });
   }
 
+
   /* Modified item expand/collapse */
   document.addEventListener("click", function (e) {
     var hdr = e.target.closest(".mod-header");
     if (hdr) hdr.parentElement.classList.toggle("open");
   });
+
 
   /* Search filter */
   function applySearchFilter() {
@@ -711,6 +1157,7 @@
   }
   els.searchBox.addEventListener("input", applySearchFilter);
 
+
   /* ── App Snapshots tab ───────────────────────────────── */
   function renderAppData() {
     var execs = appData.executables || [];
@@ -718,6 +1165,7 @@
     var links = appData.symlinks || [];
     var total = execs.length + scripts.length + links.length;
     var hasData = total > 0 || appData.timestamp;
+
 
     var noDataEl = q("appNoData");
     var contentEl = q("appContent");
@@ -729,6 +1177,7 @@
     if (noDataEl) noDataEl.style.display = "none";
     if (contentEl) contentEl.style.display = "";
 
+
     animateCount(q("appTotalCount"), total);
     animateCount(q("appExecCount"), execs.length);
     animateCount(q("appScriptCount"), scripts.length);
@@ -737,6 +1186,7 @@
     animateCount(q("cardScriptCount"), scripts.length);
     animateCount(q("cardLinkCount"), links.length);
 
+
     function fillTable(tbody, rows) {
       if (!tbody) return;
       tbody.innerHTML = rows;
@@ -744,6 +1194,7 @@
         tbody.innerHTML =
           '<tr><td colspan="99" class="net-empty">No data</td></tr>';
     }
+
 
     var execBody = document.querySelector("#execTable tbody");
     fillTable(
@@ -765,6 +1216,7 @@
         .join(""),
     );
     q("execTitleCount").textContent = "(" + execs.length + ")";
+
 
     var scriptBody = document.querySelector("#scriptTable tbody");
     fillTable(
@@ -789,6 +1241,7 @@
     );
     q("scriptTitleCount").textContent = "(" + scripts.length + ")";
 
+
     var linkBody = document.querySelector("#linkTable tbody");
     fillTable(
       linkBody,
@@ -806,6 +1259,7 @@
     );
     q("linkTitleCount").textContent = "(" + links.length + ")";
 
+
     /* Hide empty sub-sections */
     if (q("execSection"))
       q("execSection").style.display = execs.length ? "" : "none";
@@ -815,28 +1269,438 @@
       q("linkSection").style.display = links.length ? "" : "none";
   }
 
-  /* ── Network Settings tab ────────────────────────────── */
-  function fillNetTable(tableId, data) {
-    var t = q(tableId);
-    if (!t) return;
+
+  /* ── Network Settings tab — Rich Renderer ───────────────── */
+
+
+  /* Human-readable label + unit + section for every raw YAML key */
+  var NETWORK_LABELS = {
+    /* metadata */
+    os_version: { label: "OS Version", unit: "", section: "metadata" },
+    kernel_release: { label: "Kernel Release", unit: "", section: "metadata" },
+    /* sysctl_kernel */
+    kernel_sched_migration_cost_ns: {
+      label: "Sched Migration Cost",
+      unit: "ns",
+      section: "sysctl_kernel",
+    },
+    kernel_sched_latency_ns: {
+      label: "Sched Latency",
+      unit: "ns",
+      section: "sysctl_kernel",
+    },
+    kernel_sched_min_granularity_ns: {
+      label: "Sched Min Granularity",
+      unit: "ns",
+      section: "sysctl_kernel",
+    },
+    kernel_sched_autogroup_enabled: {
+      label: "Autogroup Scheduling",
+      unit: "",
+      section: "sysctl_kernel",
+    },
+    net_core_rmem_max: {
+      label: "Socket Recv Buffer Max",
+      unit: "bytes",
+      section: "sysctl_kernel",
+    },
+    net_core_wmem_max: {
+      label: "Socket Send Buffer Max",
+      unit: "bytes",
+      section: "sysctl_kernel",
+    },
+    net_ipv4_tcp_rmem: {
+      label: "TCP Recv Buffer",
+      unit: "",
+      section: "sysctl_kernel",
+    },
+    net_ipv4_tcp_wmem: {
+      label: "TCP Send Buffer",
+      unit: "",
+      section: "sysctl_kernel",
+    },
+    net_ipv4_tcp_fin_timeout: {
+      label: "TCP FIN Timeout",
+      unit: "sec",
+      section: "sysctl_kernel",
+    },
+    net_ipv4_tcp_tw_reuse: {
+      label: "TCP TIME_WAIT Reuse",
+      unit: "",
+      section: "sysctl_kernel",
+    },
+    net_ipv4_ip_forward: {
+      label: "IP Forwarding",
+      unit: "",
+      section: "sysctl_kernel",
+    },
+    net_ipv4_tcp_keepalive_time: {
+      label: "TCP Keepalive Time",
+      unit: "sec",
+      section: "sysctl_kernel",
+    },
+    net_ipv4_tcp_keepalive_intvl: {
+      label: "TCP Keepalive Interval",
+      unit: "sec",
+      section: "sysctl_kernel",
+    },
+    net_ipv4_tcp_keepalive_probes: {
+      label: "TCP Keepalive Probes",
+      unit: "",
+      section: "sysctl_kernel",
+    },
+    vm_swappiness: {
+      label: "VM Swappiness",
+      unit: "",
+      section: "sysctl_kernel",
+    },
+    vm_overcommit_memory: {
+      label: "Memory Overcommit",
+      unit: "",
+      section: "sysctl_kernel",
+    },
+    fs_file_max: {
+      label: "Max Open Files (fs)",
+      unit: "",
+      section: "sysctl_kernel",
+    },
+    /* cpu_isolation_power */
+    isolcpus: {
+      label: "Isolated CPUs",
+      unit: "",
+      section: "cpu_isolation_power",
+    },
+    nohz_full: {
+      label: "NOHZ Full CPUs",
+      unit: "",
+      section: "cpu_isolation_power",
+    },
+    cpufreq_governor: {
+      label: "CPU Frequency Governor",
+      unit: "",
+      section: "cpu_isolation_power",
+    },
+    disabled_cstates_cpu0: {
+      label: "Disabled C-States (cpu0)",
+      unit: "",
+      section: "cpu_isolation_power",
+    },
+    /* irq_affinity */
+    irqbalance_status: {
+      label: "IRQBalance Status",
+      unit: "",
+      section: "irq_affinity",
+    },
+    default_smp_affinity: {
+      label: "Default SMP Affinity",
+      unit: "",
+      section: "irq_affinity",
+    },
+    /* nic_ethtool */
+    sample_physical_interface: {
+      label: "Interface",
+      unit: "",
+      section: "nic_ethtool",
+    },
+    driver: { label: "Driver", unit: "", section: "nic_ethtool" },
+    driver_version: {
+      label: "Driver Version",
+      unit: "",
+      section: "nic_ethtool",
+    },
+    firmware_version: {
+      label: "Firmware Version",
+      unit: "",
+      section: "nic_ethtool",
+    },
+    ring_rx: {
+      label: "RX Ring Buffer Size",
+      unit: "desc",
+      section: "nic_ethtool",
+    },
+    ring_tx: {
+      label: "TX Ring Buffer Size",
+      unit: "desc",
+      section: "nic_ethtool",
+    },
+    coalesce_rx_usecs: {
+      label: "RX Coalescing Delay",
+      unit: "µs",
+      section: "nic_ethtool",
+    },
+    coalesce_tx_usecs: {
+      label: "TX Coalescing Delay",
+      unit: "µs",
+      section: "nic_ethtool",
+    },
+    /* onload_solarflare */
+    installed: { label: "Installed", unit: "", section: "onload_solarflare" },
+    version: { label: "Version", unit: "", section: "onload_solarflare" },
+    config_present: {
+      label: "Config Present",
+      unit: "",
+      section: "onload_solarflare",
+    },
+    /* hugepages_tuned */
+    hugepages_2M_nr: {
+      label: "2M Hugepages",
+      unit: "pages",
+      section: "hugepages_tuned",
+    },
+    hugepages_1G_nr: {
+      label: "1G Hugepages",
+      unit: "pages",
+      section: "hugepages_tuned",
+    },
+    thp_enabled: {
+      label: "Transparent HP Mode",
+      unit: "",
+      section: "hugepages_tuned",
+    },
+    thp_defrag: {
+      label: "Transparent HP Defrag",
+      unit: "",
+      section: "hugepages_tuned",
+    },
+    tuned_active_profile: {
+      label: "Tuned Active Profile",
+      unit: "",
+      section: "hugepages_tuned",
+    },
+    /* time_synchronization */
+    chrony_sync_status: {
+      label: "Chrony Sync Status",
+      unit: "",
+      section: "time_synchronization",
+    },
+    ntp_active_peer: {
+      label: "NTP Active Peer",
+      unit: "",
+      section: "time_synchronization",
+    },
+    ptp4l_status: {
+      label: "PTP4L Service Status",
+      unit: "",
+      section: "time_synchronization",
+    },
+    /* core_services */
+    irqbalance: { label: "IRQ Balance", unit: "", section: "core_services" },
+    chronyd: { label: "Chrony Daemon", unit: "", section: "core_services" },
+    haproxy: { label: "HAProxy", unit: "", section: "core_services" },
+    keepalived: { label: "Keepalived", unit: "", section: "core_services" },
+    ptp4l: { label: "PTP4L", unit: "", section: "core_services" },
+  };
+
+
+  /* Section definitions: key, title, icon path, accent CSS var */
+  var NETWORK_SECTIONS = [
+    {
+      key: "metadata",
+      title: "OS & Kernel",
+      accent: "--net-accent-indigo",
+      icon: '<path d="M3 3.5A1.5 1.5 0 014.5 2h7A1.5 1.5 0 0113 3.5v9a1.5 1.5 0 01-1.5 1.5h-7A1.5 1.5 0 013 12.5v-9zm1.5-.5a.5.5 0 00-.5.5v9a.5.5 0 00.5.5h7a.5.5 0 00.5-.5v-9a.5.5 0 00-.5-.5h-7z"/><path d="M5 5.5a.5.5 0 01.5-.5h5a.5.5 0 010 1h-5a.5.5 0 01-.5-.5zm0 2a.5.5 0 01.5-.5h5a.5.5 0 010 1h-5a.5.5 0 01-.5-.5zm0 2a.5.5 0 01.5-.5h3a.5.5 0 010 1h-3a.5.5 0 01-.5-.5z"/>',
+    },
+    {
+      key: "sysctl_kernel",
+      title: "Kernel / Sysctl",
+      accent: "--net-accent-blue",
+      icon: '<path d="M8 4.754a3.246 3.246 0 100 6.492 3.246 3.246 0 000-6.492zM5.754 8a2.246 2.246 0 114.492 0 2.246 2.246 0 01-4.492 0z"/><path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 01-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 01-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 01.52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 011.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 011.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 01.52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 01-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 01-1.255-.52l-.094-.319z"/>',
+    },
+    {
+      key: "cpu_isolation_power",
+      title: "CPU & Power",
+      accent: "--net-accent-amber",
+      icon: '<path d="M5 0a.5.5 0 01.5.5V2h1V.5a.5.5 0 011 0V2h1V.5a.5.5 0 011 0V2h1V.5a.5.5 0 011 0V2A2.5 2.5 0 0114 4.5h1.5a.5.5 0 010 1H14v1h1.5a.5.5 0 010 1H14v1h1.5a.5.5 0 010 1H14v1h1.5a.5.5 0 010 1H14A2.5 2.5 0 0111.5 14v1.5a.5.5 0 01-1 0V14h-1v1.5a.5.5 0 01-1 0V14h-1v1.5a.5.5 0 01-1 0V14A2.5 2.5 0 012 11.5H.5a.5.5 0 010-1H2v-1H.5a.5.5 0 010-1H2v-1H.5a.5.5 0 010-1H2A2.5 2.5 0 014.5 2V.5A.5.5 0 015 0zm-.5 3A1.5 1.5 0 003 4.5v7A1.5 1.5 0 004.5 13h7a1.5 1.5 0 001.5-1.5v-7A1.5 1.5 0 0011.5 3h-7z"/>',
+    },
+    {
+      key: "irq_affinity",
+      title: "IRQ Affinity",
+      accent: "--net-accent-purple",
+      icon: '<path d="M11.5 8a3.5 3.5 0 11-7 0 3.5 3.5 0 017 0zm-3.5 2a2 2 0 100-4 2 2 0 000 4z"/><path d="M3.25 8A4.75 4.75 0 018 3.25v-1.5A6.25 6.25 0 001.75 8h1.5zm4.75 4.75A4.75 4.75 0 013.25 8h-1.5A6.25 6.25 0 008 14.25v-1.5zm4.75-4.75A4.75 4.75 0 018 12.75v1.5A6.25 6.25 0 0014.25 8h-1.5zm-4.75-4.75A4.75 4.75 0 0112.75 8h1.5A6.25 6.25 0 008 1.75v1.5z"/>',
+    },
+    {
+      key: "nic_ethtool",
+      title: "NIC & Ethtool",
+      accent: "--net-accent-teal",
+      icon: '<path d="M0 4a2 2 0 012-2h12a2 2 0 012 2v8a2 2 0 01-2 2H2a2 2 0 01-2-2V4zm2.5 1a.5.5 0 000 1h11a.5.5 0 000-1h-11zM2 8.5a.5.5 0 01.5-.5h3a.5.5 0 010 1h-3a.5.5 0 01-.5-.5zm0 2a.5.5 0 01.5-.5h7a.5.5 0 010 1h-7a.5.5 0 01-.5-.5z"/>',
+    },
+    {
+      key: "onload_solarflare",
+      title: "Onload / Solarflare",
+      accent: "--net-accent-sky",
+      icon: '<path d="M9.293 0H4a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V4.707A1 1 0 0013.707 4L10 .293A1 1 0 009.293 0zM9.5 3.5v-2l3 3h-2a1 1 0 01-1-1z"/>',
+    },
+    {
+      key: "hugepages_tuned",
+      title: "Hugepages & Tuned",
+      accent: "--net-accent-orange",
+      icon: '<path d="M0 2a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1v10.5a.5.5 0 01-.5.5h-13a.5.5 0 01-.5-.5V5a1 1 0 01-1-1V2zm2 3v10h12V5H2zm13-2H1v1h14V3z"/>',
+    },
+    {
+      key: "time_synchronization",
+      title: "Time Synchronization",
+      accent: "--net-accent-green",
+      icon: '<path d="M8 3.5a.5.5 0 00-1 0V9a.5.5 0 00.252.434l3.5 2a.5.5 0 00.496-.868L8 8.71V3.5z"/><path d="M8 16A8 8 0 108 0a8 8 0 000 16zm7-8A7 7 0 111 8a7 7 0 0114 0z"/>',
+    },
+    {
+      key: "core_services",
+      title: "Core Services",
+      accent: "--net-accent-red",
+      icon: '<path d="M8 1a7 7 0 100 14A7 7 0 008 1zM0 8a8 8 0 1116 0A8 8 0 010 8z"/><path d="M6.5 5.5v5a.5.5 0 001 0v-5a.5.5 0 00-1 0zm3 0v5a.5.5 0 001 0v-5a.5.5 0 00-1 0z"/>',
+    },
+    {
+      key: "config_checksums",
+      title: "Config Checksums",
+      accent: "--net-accent-slate",
+      icon: '<path d="M8 0a8 8 0 100 16A8 8 0 008 0zM2.04 4.326c.325 1.329 2.532 2.54 3.717 3.19.48.263.793.434.743.484-.08.08-.162.158-.242.234-.416.396-.787.749-.758 1.266.035.634.618.824 1.214 1.017.577.188 1.168.38 1.286.983.082.417-.075.988-.22 1.52-.215.782-.406 1.48.22 1.48 1.5-.5 3.798-3.186 4-5 .138-1.243-2-2-3.5-2.5-.478-.16-.755.081-.99.284-.172.15-.322.279-.51.216-.445-.148-2.507-1.388-2.507-1.388z"/>',
+    },
+    {
+      key: "file_modification_checks",
+      title: "File Modifications",
+      accent: "--net-accent-yellow",
+      icon: '<path d="M8 15A7 7 0 118 1a7 7 0 010 14zm0 1A8 8 0 108 0a8 8 0 000 16z"/><path d="M7.002 11a1 1 0 112 0 1 1 0 01-2 0zM7.1 4.995a.905.905 0 111.8 0l-.35 3.507a.552.552 0 01-1.1 0L7.1 4.995z"/>',
+    },
+  ];
+
+
+  /* Service state badge helper */
+  var SERVICE_STATE_COLOURS = {
+    enabled: "net-svc-enabled",
+    disabled: "net-svc-disabled",
+    active: "net-svc-enabled",
+    inactive: "net-svc-disabled",
+    masked: "net-svc-disabled",
+    static: "net-svc-neutral",
+  };
+  function svcBadge(val) {
+    var v = String(val || "")
+      .trim()
+      .toLowerCase();
+    var cls = SERVICE_STATE_COLOURS[v] || "net-svc-neutral";
+    return '<span class="net-svc-badge ' + cls + '">' + esc(val) + "</span>";
+  }
+
+
+  function renderNetSection(secDef, data, diffMap) {
     var entries = Object.entries(data || {});
-    if (!entries.length) {
-      t.innerHTML =
-        '<tr><td colspan="2" class="net-empty">No data collected</td></tr>';
-      return;
-    }
-    t.innerHTML = entries
+    if (!entries.length) return "";
+    var accentVar = secDef.accent;
+    var isServices = secDef.key === "core_services";
+    var isFileList = secDef.key === "file_modification_checks";
+
+    var secDiffCount = 0;
+    var rows = entries
       .map(function (kv) {
+        var rawKey = kv[0];
+        var rawVal = kv[1];
+        var meta = NETWORK_LABELS[rawKey] || {};
+        var label =
+          meta.label ||
+          rawKey.replace(/_/g, " ").replace(/\b\w/g, function (c) {
+            return c.toUpperCase();
+          });
+        var unit = meta.unit || "";
+
+
+        /* Drift detection */
+        var changed = diffMap && diffMap[rawKey];
+        var driftHtml = "";
+        if (changed) {
+          secDiffCount++;
+          driftHtml =
+            '<span class="net-drift-badge">CHANGED</span>' +
+            '<span class="net-old-value">' +
+            esc(String(changed.old)) +
+            " → </span>";
+        }
+
+
+        /* Value formatting */
+        var valueHtml;
+        if (isServices) {
+          valueHtml = svcBadge(rawVal);
+        } else if (isFileList && Array.isArray(rawVal)) {
+          valueHtml =
+            '<ul class="net-file-list">' +
+            rawVal
+              .map(function (f) {
+                return "<li><code>" + esc(f) + "</code></li>";
+              })
+              .join("") +
+            "</ul>";
+        } else {
+          var displayVal = esc(String(rawVal == null ? "—" : rawVal));
+          valueHtml = '<span class="net-val">' + displayVal + "</span>";
+          if (unit && unit !== "desc") {
+            valueHtml += '<span class="net-unit"> ' + esc(unit) + "</span>";
+          }
+        }
+
+
         return (
-          "<tr><td>" +
-          esc(kv[0]) +
-          "</td><td>" +
-          esc(String(kv[1])) +
-          "</td></tr>"
+          '<tr class="' +
+          (changed ? "net-drift-row" : "") +
+          '">' +
+          '<td class="net-key-cell"><span class="net-key-label">' +
+          esc(label) +
+          "</span>" +
+          '<span class="net-key-raw">' +
+          esc(rawKey) +
+          "</span></td>" +
+          '<td class="net-val-cell">' +
+          driftHtml +
+          valueHtml +
+          "</td>" +
+          "</tr>"
         );
       })
       .join("");
+
+
+    /* Open by default if any property in this card has drifted */
+    var isOpen = secDiffCount > 0;
+    var driftBadgeHtml =
+      secDiffCount > 0
+        ? '<span class="net-sec-drift-badge">' +
+          secDiffCount +
+          " changed</span>"
+        : "";
+
+
+    return (
+      '<div class="net-section-card' +
+      (isOpen ? " open" : "") +
+      '" style="--sec-accent: var(' +
+      accentVar +
+      ')">' +
+      '<div class="net-section-header" title="Click to expand or collapse">' +
+      '<svg viewBox="0 0 16 16" fill="currentColor" class="net-sec-icon">' +
+      secDef.icon +
+      "</svg>" +
+      '<span class="net-sec-title">' +
+      esc(secDef.title) +
+      "</span>" +
+      '<div class="net-sec-meta">' +
+      driftBadgeHtml +
+      '<span class="net-sec-count">' +
+      entries.length +
+      " propert" +
+      (entries.length === 1 ? "y" : "ies") +
+      "</span>" +
+      '<span class="net-sec-chevron">&#9656;</span>' +
+      "</div>" +
+      "</div>" +
+      '<div class="net-section-body">' +
+      '<div class="net-section-body-inner">' +
+      '<div class="table-wrap">' +
+      '<table class="network-table net-rich-table"><tbody>' +
+      rows +
+      "</tbody></table>" +
+      "</div></div></div>" +
+      "</div>"
+    );
   }
+
 
   function renderNetworkData() {
     var hasData =
@@ -854,19 +1718,122 @@
     }
     if (noDataEl) noDataEl.style.display = "none";
     if (contentEl) contentEl.style.display = "";
-    fillNetTable("sysctlTable", networkData.sysctl_kernel);
-    fillNetTable("cpuTable", networkData.cpu_isolation_power);
-    fillNetTable("irqTable", networkData.irq_affinity);
-    fillNetTable("nicTable", networkData.nic_ethtool);
-    fillNetTable("timeTable", networkData.time_synchronization);
-    fillNetTable("hpTable", networkData.hugepages_tuned);
+
+
+    /* Collect drift map from threshold data */
+    var netDiff = (thresholdData && thresholdData.network_diff) || {};
+    var diffMap = netDiff.modified_settings || {};
+    var changedCount = Object.keys(diffMap).length;
+
+
+    /* Drift banner */
+    var banner = q("netDriftBanner");
+    if (banner) {
+      if (changedCount > 0) {
+        banner.innerHTML =
+          '<svg viewBox="0 0 16 16" fill="currentColor" width="16" height="16"><path d="M8.982 1.566a1.13 1.13 0 00-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 01-1.1 0L7.1 5.995A.905.905 0 018 5zm.002 6a1 1 0 110 2 1 1 0 010-2z"/></svg>' +
+          "<strong>" +
+          changedCount +
+          " network propert" +
+          (changedCount === 1 ? "y" : "ies") +
+          " changed</strong>" +
+          " since last approved baseline — review rows highlighted in red below.";
+        banner.style.display = "flex";
+      } else {
+        banner.style.display = "none";
+      }
+    }
+
+
+    /* Render sections */
+    var container = q("netSectionsContainer");
+    if (!container) return;
+    var visibleCount = 0;
+    var html = '<div class="net-sections-grid">';
+    NETWORK_SECTIONS.forEach(function (sec) {
+      var sectionData = networkData[sec.key];
+      if (
+        !sectionData ||
+        typeof sectionData !== "object" ||
+        !Object.keys(sectionData).length
+      )
+        return;
+      visibleCount++;
+      /* Per-section diff: match by key in sectionData, explicit section attribute, or NETWORK_LABELS */
+      var secDiffMap = {};
+      Object.keys(diffMap).forEach(function (k) {
+        var d = diffMap[k];
+        if (d && d.section === sec.key) {
+          secDiffMap[k] = d;
+        } else if (Object.prototype.hasOwnProperty.call(sectionData, k)) {
+          secDiffMap[k] = d;
+        } else {
+          var meta = NETWORK_LABELS[k];
+          if (meta && meta.section === sec.key) secDiffMap[k] = d;
+        }
+      });
+      html += renderNetSection(sec, sectionData, secDiffMap);
+    });
+    html += "</div>";
+    container.innerHTML = html;
+
+
+    var catCount = q("netCategoryCount");
+    if (catCount) {
+      catCount.textContent = visibleCount + " categories";
+    }
   }
+
+
+  /* Network section card expand/collapse toggle */
+  document.addEventListener("click", function (e) {
+    var hdr = e.target.closest(".net-section-header");
+    if (hdr) {
+      var card = hdr.closest(".net-section-card");
+      if (card) card.classList.toggle("open");
+    }
+  });
+
+
+  /* Network toolbar Expand / Collapse All buttons */
+  var netExpandBtn = q("netExpandAllBtn");
+  if (netExpandBtn) {
+    netExpandBtn.addEventListener("click", function () {
+      document.querySelectorAll(".net-section-card").forEach(function (c) {
+        c.classList.add("open");
+      });
+    });
+  }
+  var netCollapseBtn = q("netCollapseAllBtn");
+  if (netCollapseBtn) {
+    netCollapseBtn.addEventListener("click", function () {
+      document.querySelectorAll(".net-section-card").forEach(function (c) {
+        c.classList.remove("open");
+      });
+    });
+  }
+
 
   /* ── Approval panel ──────────────────────────────────── */
   function _serverIdFromCentralPath() {
     var m = window.location.pathname.match(/^\/server\/([^/]+)\/dashboard/);
     return m ? m[1] : null;
   }
+
+
+  // This dashboard is usually opened in a separate tab from central, so a
+  // decision here must tell central to re-derive its pending badge.
+  function _notifyPendingChanged() {
+    var msg = { type: "PENDING_CHANGED" };
+    try {
+      if (window.opener) window.opener.postMessage(msg, window.location.origin);
+      if (window.parent && window.parent !== window)
+        window.parent.postMessage(msg, window.location.origin);
+    } catch (e) {
+      /* cross-origin embed — nothing to notify */
+    }
+  }
+
 
   // Merge rather than replace: thresholdData.reports is seeded from the
   // embedded threshold-data script tag, which reflects the agent's local
@@ -888,6 +1855,7 @@
         merged[k] = newReports[k];
     thresholdData.reports = merged;
   }
+
 
   function fetchReportStatus() {
     var sid = _serverIdFromCentralPath();
@@ -916,18 +1884,27 @@
       .catch(function () {});
   }
 
-  window.approveReport = function (basename) {
-    if (
-      !confirm(
-        'Approve report "' + basename + '"? This updates the golden baseline.',
+
+  window.approveReport = function (basename, opts) {
+    opts = opts || {};
+    var description;
+    if (opts.reason != null) {
+      description = String(opts.reason);
+    } else {
+      if (
+        !confirm(
+          'Approve report "' +
+            basename +
+            '"? This updates the golden baseline.',
+        )
       )
-    )
-      return;
-    var description =
-      prompt(
-        "Optional: add a note for this approval (reason, ticket #, etc.)",
-        "",
-      ) || "";
+        return;
+      description =
+        prompt(
+          "Optional: add a note for this approval (reason, ticket #, etc.)",
+          "",
+        ) || "";
+    }
     var sid = _serverIdFromCentralPath();
     var url = sid
       ? "/api/server/" + sid + "/report-approve"
@@ -940,6 +1917,7 @@
       threshold:
         meta.threshold != null ? meta.threshold : thresholdData.threshold || 0,
       description: description.trim(),
+      user: opts.user || "dashboard_user",
     };
     if (sid) {
       // Central has no filesystem access to the agent's report file, so
@@ -969,7 +1947,10 @@
             if (allCbs[i]) allCbs[i].checked = true;
           });
           renderMultiple(selectedIndices);
-          showToast(d.message || "Report approved", "success");
+          _notifyPendingChanged();
+          _afterDecision(d);
+          if (!opts.silent)
+            showToast(d.message || "Report approved", "success");
         } else showToast(d.message || "Failed", "error");
       })
       .catch(function (e) {
@@ -977,13 +1958,20 @@
       });
   };
 
-  window.rejectReport = function (basename) {
-    if (!confirm('Reject report "' + basename + '"?')) return;
-    var description =
-      prompt(
-        "Optional: add a note for this rejection (reason, ticket #, etc.)",
-        "",
-      ) || "";
+
+  window.rejectReport = function (basename, opts) {
+    opts = opts || {};
+    var description;
+    if (opts.reason != null) {
+      description = String(opts.reason);
+    } else {
+      if (!confirm('Reject report "' + basename + '"?')) return;
+      description =
+        prompt(
+          "Optional: add a note for this rejection (reason, ticket #, etc.)",
+          "",
+        ) || "";
+    }
     var sid = _serverIdFromCentralPath();
     var url = sid
       ? "/api/server/" + sid + "/report-reject"
@@ -996,7 +1984,9 @@
       threshold:
         meta.threshold != null ? meta.threshold : thresholdData.threshold || 0,
       description: description.trim(),
+      user: opts.user || "dashboard_user",
     };
+
 
     fetch(url, {
       method: "POST",
@@ -1018,6 +2008,8 @@
             if (allCbs[i]) allCbs[i].checked = true;
           });
           renderMultiple(selectedIndices);
+          _notifyPendingChanged();
+          _afterDecision(d);
           showToast(d.message || "Report rejected", "success");
         } else showToast(d.message || "Failed", "error");
       })
@@ -1025,6 +2017,7 @@
         showToast("Error: " + e.message, "error");
       });
   };
+
 
   /* ── Snapshot audit ─────────────────────────────────── */
   function snapshotIdForReport(entry) {
@@ -1055,7 +2048,7 @@
             esc(r.action) +
             "</span></td>" +
             '<td class="mono">' +
-            esc(r.snapshot_id) +
+            esc(formatEntityName(r.snapshot_id)) +
             "</td>" +
             "<td>" +
             esc(r.user) +
@@ -1072,134 +2065,220 @@
     if (auditHistory) auditHistory.innerHTML = body;
     return body;
   }
-  function renderDriftAudit(indices) {
-    if (!els.driftAuditContent) return;
-    if (comparisonMode() || indices.length !== 1) {
-      els.driftAuditContent.innerHTML = "";
+  function renderDriftAudit() {
+    var cont = q("driftAuditContent");
+    if (!cont) return;
+
+    var totalFileChanges = 0;
+    var added = 0;
+    var deleted = 0;
+    var modified = 0;
+    if (selectedIndices && selectedIndices.length === 1) {
+      var r = (reports[selectedIndices[0]] || {}).data || {};
+      var s = r.summary || {};
+      added = s.added || 0;
+      deleted = s.deleted || 0;
+      modified = s.modified || 0;
+      totalFileChanges = added + deleted + modified;
+    } else if (selectedIndices && selectedIndices.length > 1) {
+      selectedIndices.forEach(function (idx) {
+        var r = (reports[idx] || {}).data || {};
+        var s = r.summary || {};
+        added += s.added || 0;
+        deleted += s.deleted || 0;
+        modified += s.modified || 0;
+      });
+      totalFileChanges = added + deleted + modified;
+    } else if (reports.length > 0) {
+      var lastR = (reports[reports.length - 1] || {}).data || {};
+      var s = lastR.summary || {};
+      added = s.added || 0;
+      deleted = s.deleted || 0;
+      modified = s.modified || 0;
+      totalFileChanges = added + deleted + modified;
+    }
+
+    if (!totalFileChanges) {
+      cont.innerHTML = "";
       return;
     }
-    var report = reports[indices[0]].data || {};
-    var summary = report.summary || {};
-    var changeCount =
-      (summary.added || 0) + (summary.deleted || 0) + (summary.modified || 0);
-    var snapshot = snapshotIdForReport(reports[indices[0]]);
-    if (!changeCount) {
-      els.driftAuditContent.innerHTML = "";
-      return;
-    }
-    if (!snapshot) {
-      els.driftAuditContent.innerHTML = "";
-      return;
-    }
+
     var sid = _serverIdFromCentralPath();
-    var auditUrl = sid
-      ? "/api/server/" + sid + "/audit-status"
-      : "/api/audit-status";
-    fetch(auditUrl)
+    var statusUrl = sid ? "/api/server/" + sid + "/status" : "/api/status";
+
+    var defaultUser = "";
+    try {
+      defaultUser = localStorage.getItem(APPROVER_KEY) || "";
+    } catch (e) {}
+
+    function buildDriftForm() {
+      return (
+        '<section class="panel audit-panel">' +
+        '<h2 class="panel-title"><span class="panel-dot dot-alert"></span>Pending File &amp; Directory Baseline Approval</h2>' +
+        '<div class="audit-body">' +
+        '<p class="audit-caption"><span class="audit-warn-count">' +
+        totalFileChanges +
+        " detected file/directory change(s)</span> vs baseline (" +
+        added +
+        " added, " +
+        deleted +
+        " deleted, " +
+        modified +
+        " modified)</p>" +
+        '<div class="config-form audit-controls">' +
+        '<div class="form-group">' +
+        '<label for="driftApprover">Approver Name <span class="req">*</span></label>' +
+        '<input type="text" id="driftApprover" autocomplete="name" placeholder="e.g. John Doe / Lead Admin" value="' +
+        esc(defaultUser) +
+        '" required>' +
+        "</div>" +
+        '<div class="form-group">' +
+        '<label for="driftReason">Reason / Ticket Note <span class="req">*</span></label>' +
+        '<input type="text" id="driftReason" placeholder="e.g. Scheduled file update / Ticket #1234" required>' +
+        "</div>" +
+        "</div>" +
+        '<div class="config-actions audit-actions">' +
+        '<button type="button" id="rejectDriftBaselineBtn" class="btn btn-secondary btn-reject-alt">&#10007; Reject Changes</button>' +
+        '<button type="button" id="approveDriftBaselineBtn" class="btn btn-primary btn-approve-alt">&#10003; Approve and Update Baseline</button>' +
+        "</div>" +
+        "</div>" +
+        "</section>"
+      );
+    }
+
+    function wireDriftButtons() {
+      var btnApprove = q("approveDriftBaselineBtn");
+      if (btnApprove) {
+        btnApprove.addEventListener("click", function () {
+          var user = (q("driftApprover") ? q("driftApprover").value : "").trim();
+          var reason = (q("driftReason") ? q("driftReason").value : "").trim();
+          if (!user || !reason) {
+            showToast("Approver name and reason are required", "error");
+            return;
+          }
+          try { localStorage.setItem(APPROVER_KEY, user); } catch (e) {}
+
+          var entry = (selectedIndices && selectedIndices.length === 1)
+            ? reports[selectedIndices[0]]
+            : (reports.length ? reports[reports.length - 1] : null);
+          var snapId = snapshotIdForReport(entry);
+          var repBasename = currentReportBasename();
+
+          if (snapId) {
+            decideSnapshot("approve", snapId, { user: user, reason: reason, silent: true });
+          }
+          if (repBasename) {
+            window.approveReport(repBasename, { user: user, reason: reason });
+          }
+          decideCategoryBaseline(
+            "drift",
+            "approve",
+            (entry && entry.data && entry.data.snapshot) || (snapId ? { snapshot: snapId } : {}),
+            user,
+            reason
+          );
+        });
+      }
+      var btnReject = q("rejectDriftBaselineBtn");
+      if (btnReject) {
+        btnReject.addEventListener("click", function () {
+          var user = (q("driftApprover") ? q("driftApprover").value : "").trim();
+          var reason = (q("driftReason") ? q("driftReason").value : "").trim();
+          if (!user || !reason) {
+            showToast("Approver name and reason are required", "error");
+            return;
+          }
+          try { localStorage.setItem(APPROVER_KEY, user); } catch (e) {}
+
+          var entry = (selectedIndices && selectedIndices.length === 1)
+            ? reports[selectedIndices[0]]
+            : (reports.length ? reports[reports.length - 1] : null);
+          var snapId = snapshotIdForReport(entry);
+          var repBasename = currentReportBasename();
+
+          if (snapId) {
+            decideSnapshot("reject", snapId, { user: user, reason: reason, silent: true });
+          }
+          if (repBasename) {
+            window.rejectReport(repBasename, { user: user, reason: reason });
+          }
+          decideCategoryBaseline("drift", "reject", {}, user, reason);
+        });
+      }
+    }
+
+    fetch(statusUrl)
       .then(function (r) {
         if (!r.ok) throw new Error();
         return r.json();
       })
       .then(function (data) {
-        var history = renderAuditHistory(data.history);
-        var decision = (data.history || [])
-          .slice()
-          .reverse()
-          .find(function (record) {
-            return record.snapshot_id === snapshot;
-          });
-        var decisionPanel = "";
-        if (decision) {
-          var isApproved =
-            (decision.action || "").toLowerCase().indexOf("approve") !== -1;
+        var catStatus = (data.categories && data.categories.drift) || {};
+        var isApproved = catStatus.status === "approved";
+        var isRejected = catStatus.status === "rejected";
+
+        if (isApproved || isRejected) {
           var statusDot = isApproved ? "dot-added" : "dot-deleted";
           var statusBadge = isApproved
             ? "status-pill approved"
             : "status-pill rejected";
-          decisionPanel =
+          cont.innerHTML =
             '<section class="panel audit-panel">' +
             '<h2 class="panel-title"><span class="panel-dot ' +
             statusDot +
-            '"></span>Baseline Decision Recorded</h2>' +
+            '"></span>File &amp; Directory Baseline Decision Recorded</h2>' +
             '<div class="audit-body">' +
             '<div class="audit-decision-row">' +
             '<span class="' +
             statusBadge +
             '">' +
-            (isApproved ? "&#10003; " : "&#10007; ") +
-            esc(decision.action) +
+            (isApproved ? "&#10003; APPROVED" : "&#10007; REJECTED") +
             "</span>" +
-            '<span class="audit-decision-meta">by <strong>' +
-            esc(decision.user) +
-            "</strong> &bull; " +
-            esc(formatDate(decision.timestamp || "")) +
+            '<span class="audit-decision-meta">' +
+            (catStatus.timestamp
+              ? " &bull; " + esc(formatDate(catStatus.timestamp))
+              : "") +
             "</span>" +
-            "</div>" +
-            '<div class="audit-decision-reason"><span class="audit-reason-label">Reason / Note:</span> ' +
-            esc(decision.reason) +
             "</div>" +
             "</div>" +
             "</section>";
+        } else if (totalFileChanges > 0) {
+          cont.innerHTML = buildDriftForm();
+          wireDriftButtons();
         } else {
-          decisionPanel =
-            '<section class="panel audit-panel">' +
-            '<h2 class="panel-title"><span class="panel-dot dot-alert"></span>Pending Baseline Approval</h2>' +
-            '<div class="audit-body">' +
-            '<p class="audit-caption"><span class="audit-warn-count">' +
-            changeCount +
-            ' detected change(s)</span> in snapshot <span class="mono audit-snapshot-tag">' +
-            esc(snapshot) +
-            "</span></p>" +
-            '<div class="config-form audit-controls">' +
-            '<div class="form-group">' +
-            '<label for="driftApprover">Approver Name <span class="req">*</span></label>' +
-            '<input type="text" id="driftApprover" autocomplete="name" placeholder="e.g. John Doe / Team Lead" required>' +
-            "</div>" +
-            '<div class="form-group">' +
-            '<label for="driftReason">Reason / Ticket Note <span class="req">*</span></label>' +
-            '<input type="text" id="driftReason" placeholder="e.g. Approved update / Ticket #1234" required>' +
-            "</div>" +
-            "</div>" +
-            '<div class="config-actions audit-actions">' +
-            '<button type="button" id="rejectDriftSnapshotBtn" class="btn btn-secondary btn-reject-alt">&#10007; Reject Changes</button>' +
-            '<button type="button" id="approveDriftSnapshotBtn" class="btn btn-primary btn-approve-alt">&#10003; Approve and Update Baseline</button>' +
-            "</div>" +
-            "</div>" +
-            "</section>";
-        }
-        els.driftAuditContent.innerHTML =
-          decisionPanel +
-          '<section class="panel audit-panel">' +
-          '<h2 class="panel-title"><span class="panel-dot dot-dash"></span>Approval Pipeline</h2>' +
-          '<div class="table-wrap"><table class="network-table"><thead><tr><th>Timestamp</th><th>Action</th><th>Snapshot ID</th><th>User / Approver</th><th>Reason / Note</th></tr></thead><tbody>' +
-          history +
-          "</tbody></table></div>" +
-          "</section>";
-        if (!decision) {
-          q("approveDriftSnapshotBtn").addEventListener("click", function () {
-            decideSnapshot("approve", snapshot);
-          });
-          q("rejectDriftSnapshotBtn").addEventListener("click", function () {
-            decideSnapshot("reject", snapshot);
-          });
+          cont.innerHTML = "";
         }
       })
       .catch(function () {
-        els.driftAuditContent.innerHTML = "";
+        if (totalFileChanges > 0) {
+          cont.innerHTML = buildDriftForm();
+          wireDriftButtons();
+        } else {
+          cont.innerHTML = "";
+        }
       });
   }
-  function decideSnapshot(action, snapshot) {
-    var user = q("driftApprover").value.trim(),
-      reason = q("driftReason").value.trim();
+
+
+  function decideSnapshot(action, snapshot, opts) {
+    opts = opts || {};
+    var user =
+      opts.user != null
+        ? String(opts.user).trim()
+        : (q("driftApprover") ? q("driftApprover").value : "").trim();
+    var reason =
+      opts.reason != null
+        ? String(opts.reason).trim()
+        : (q("driftReason") ? q("driftReason").value : "").trim();
     if (!user || !reason) {
       showToast("Approver name and reason are required", "error");
-      return;
+      return Promise.resolve(false);
     }
     var sid = _serverIdFromCentralPath();
     var decisionUrl = sid
       ? "/api/server/" + sid + "/snapshot-" + action
       : "/api/snapshot-" + action;
-    fetch(decisionUrl, {
+    return fetch(decisionUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ snapshot: snapshot, user: user, reason: reason }),
@@ -1212,13 +2291,1017 @@
       })
       .then(function (d) {
         renderAuditHistory(d.history);
-        showToast("Snapshot " + action + " recorded", "success");
-        if (selectedIndices.length === 1) renderDriftAudit(selectedIndices);
+        updateTabBadges();
+        return true;
+      })
+      .catch(function (e) {
+        if (!opts.silent) showToast(e.message, "error");
+        return false;
+      });
+  }
+  /* ── Tab Badges & Baseline Deciders (App & Network) ───── */
+  function updateTabBadges() {
+    var repCount = 0;
+    var fileCount = 0;
+    if (selectedIndices && selectedIndices.length === 1) {
+      var r = reports[selectedIndices[0]].data || {};
+      var s = r.summary || {};
+      var fc = (s.added || 0) + (s.deleted || 0) + (s.modified || 0);
+      fileCount = fc;
+      var rApp = r.app_diff || thresholdData.app_diff || {};
+      var ac =
+        (rApp.added_apps || []).length +
+        (rApp.removed_apps || []).length +
+        (rApp.updated_apps || []).length;
+      var rNet = r.network_diff || thresholdData.network_diff || {};
+      var nc = Object.keys(rNet.modified_settings || {}).length;
+      repCount = fc + ac + nc;
+    } else if (selectedIndices && selectedIndices.length > 1) {
+      selectedIndices.forEach(function (idx) {
+        var r = reports[idx].data || {};
+        var s = r.summary || {};
+        var fc = (s.added || 0) + (s.deleted || 0) + (s.modified || 0);
+        fileCount += fc;
+        repCount += fc;
+      });
+    } else if (reports.length > 0) {
+      var lastR = reports[reports.length - 1].data || {};
+      var s = lastR.summary || {};
+      var fc = (s.added || 0) + (s.deleted || 0) + (s.modified || 0);
+      fileCount = fc;
+      var rApp = lastR.app_diff || thresholdData.app_diff || {};
+      var ac =
+        (rApp.added_apps || []).length +
+        (rApp.removed_apps || []).length +
+        (rApp.updated_apps || []).length;
+      var rNet = lastR.network_diff || thresholdData.network_diff || {};
+      var nc = Object.keys(rNet.modified_settings || {}).length;
+      repCount = fc + ac + nc;
+    }
+    var bRep = q("badge-reports");
+    if (bRep) {
+      if (repCount > 0) {
+        bRep.textContent = repCount;
+        bRep.style.display = "inline-flex";
+      } else {
+        bRep.style.display = "none";
+      }
+    }
+
+    var bFiles = q("badge-files");
+    if (bFiles) {
+      if (fileCount > 0) {
+        bFiles.textContent = fileCount;
+        bFiles.style.display = "inline-flex";
+      } else {
+        bFiles.style.display = "none";
+      }
+    }
+
+
+    var appDiff = (thresholdData && thresholdData.app_diff) || {};
+    if (
+      !appDiff.category &&
+      reports.length &&
+      reports[reports.length - 1].data.app_diff
+    ) {
+      appDiff = reports[reports.length - 1].data.app_diff;
+    }
+    var appTotal =
+      (appDiff.added_apps || []).length +
+      (appDiff.removed_apps || []).length +
+      (appDiff.updated_apps || []).length;
+    var bApp = q("badge-app");
+    if (bApp) {
+      if (appTotal > 0) {
+        bApp.textContent = appTotal;
+        bApp.style.display = "inline-flex";
+      } else {
+        bApp.style.display = "none";
+      }
+    }
+
+
+    var netDiff = (thresholdData && thresholdData.network_diff) || {};
+    if (
+      !netDiff.category &&
+      reports.length &&
+      reports[reports.length - 1].data.network_diff
+    ) {
+      netDiff = reports[reports.length - 1].data.network_diff;
+    }
+    var netTotal = Object.keys(netDiff.modified_settings || {}).length;
+    var bNet = q("badge-network");
+    if (bNet) {
+      if (netTotal > 0) {
+        bNet.textContent = netTotal;
+        bNet.style.display = "inline-flex";
+      } else {
+        bNet.style.display = "none";
+      }
+    }
+
+
+    updateApprovalBar();
+  }
+
+
+  function renderAppAudit() {
+    var cont = q("appAuditContent");
+    if (!cont) return;
+    var appDiff = (thresholdData && thresholdData.app_diff) || {};
+    if (
+      !appDiff.category &&
+      reports.length &&
+      reports[reports.length - 1].data.app_diff
+    ) {
+      appDiff = reports[reports.length - 1].data.app_diff;
+    }
+    var added = (appDiff.added_apps || []).length;
+    var removed = (appDiff.removed_apps || []).length;
+    var updated = (appDiff.updated_apps || []).length;
+    var totalAppChanges = added + removed + updated;
+
+
+    if (!totalAppChanges) {
+      cont.innerHTML = "";
+      return;
+    }
+
+
+    var sid = _serverIdFromCentralPath();
+    var statusUrl = sid ? "/api/server/" + sid + "/status" : "/api/status";
+
+
+    fetch(statusUrl)
+      .then(function (r) {
+        if (!r.ok) throw new Error();
+        return r.json();
+      })
+      .then(function (data) {
+        var catStatus = (data.categories && data.categories.app) || {};
+        var isApproved = catStatus.status === "approved";
+        var isRejected = catStatus.status === "rejected";
+
+        if (isApproved || isRejected) {
+          var statusDot = isApproved ? "dot-added" : "dot-deleted";
+          var statusBadge = isApproved
+            ? "status-pill approved"
+            : "status-pill rejected";
+          cont.innerHTML =
+            '<section class="panel audit-panel">' +
+            '<h2 class="panel-title"><span class="panel-dot ' +
+            statusDot +
+            '"></span>Application Baseline Decision Recorded</h2>' +
+            '<div class="audit-body">' +
+            '<div class="audit-decision-row">' +
+            '<span class="' +
+            statusBadge +
+            '">' +
+            (isApproved ? "&#10003; APPROVED" : "&#10007; REJECTED") +
+            "</span>" +
+            '<span class="audit-decision-meta">' +
+            (catStatus.timestamp
+              ? " &bull; " + esc(formatDate(catStatus.timestamp))
+              : "") +
+            "</span>" +
+            "</div>" +
+            "</div>" +
+            "</section>";
+        } else if (totalAppChanges > 0) {
+          cont.innerHTML =
+            '<section class="panel audit-panel">' +
+            '<h2 class="panel-title"><span class="panel-dot dot-alert"></span>Pending Application Baseline Approval</h2>' +
+            '<div class="audit-body">' +
+            '<p class="audit-caption"><span class="audit-warn-count">' +
+            totalAppChanges +
+            " detected binary/script change(s)</span> vs approved baseline (" +
+            added +
+            " added, " +
+            removed +
+            " removed, " +
+            updated +
+            " updated)</p>" +
+            '<div class="config-form audit-controls">' +
+            '<div class="form-group">' +
+            '<label for="appApprover">Approver Name <span class="req">*</span></label>' +
+            '<input type="text" id="appApprover" autocomplete="name" placeholder="e.g. John Doe / Team Lead" required>' +
+            "</div>" +
+            '<div class="form-group">' +
+            '<label for="appReason">Reason / Ticket Note <span class="req">*</span></label>' +
+            '<input type="text" id="appReason" placeholder="e.g. Approved binary upgrade / Ticket #1234" required>' +
+            "</div>" +
+            "</div>" +
+            '<div class="config-actions audit-actions">' +
+            '<button type="button" id="rejectAppBaselineBtn" class="btn btn-secondary btn-reject-alt">&#10007; Reject Changes</button>' +
+            '<button type="button" id="approveAppBaselineBtn" class="btn btn-primary btn-approve-alt">&#10003; Approve and Update Baseline</button>' +
+            "</div>" +
+            "</div>" +
+            "</section>";
+
+          var btnApprove = q("approveAppBaselineBtn");
+          if (btnApprove) {
+            btnApprove.addEventListener("click", function () {
+              var user = (
+                q("appApprover") ? q("appApprover").value : ""
+              ).trim();
+              var reason = (q("appReason") ? q("appReason").value : "").trim();
+              decideCategoryBaseline("app", "approve", appData, user, reason);
+            });
+          }
+          var btnReject = q("rejectAppBaselineBtn");
+          if (btnReject) {
+            btnReject.addEventListener("click", function () {
+              var user = (
+                q("appApprover") ? q("appApprover").value : ""
+              ).trim();
+              var reason = (q("appReason") ? q("appReason").value : "").trim();
+              decideCategoryBaseline("app", "reject", {}, user, reason);
+            });
+          }
+        } else {
+          cont.innerHTML = "";
+        }
+      })
+      .catch(function () {
+        if (totalAppChanges > 0) {
+          cont.innerHTML =
+            '<section class="panel audit-panel">' +
+            '<h2 class="panel-title"><span class="panel-dot dot-alert"></span>Pending Application Baseline Approval</h2>' +
+            '<div class="audit-body">' +
+            '<p class="audit-caption"><span class="audit-warn-count">' +
+            totalAppChanges +
+            " detected binary/script change(s)</span> vs approved baseline</p>" +
+            '<div class="config-form audit-controls">' +
+            '<div class="form-group">' +
+            '<label for="appApprover">Approver Name <span class="req">*</span></label>' +
+            '<input type="text" id="appApprover" autocomplete="name" placeholder="e.g. John Doe / Team Lead" required>' +
+            "</div>" +
+            '<div class="form-group">' +
+            '<label for="appReason">Reason / Ticket Note <span class="req">*</span></label>' +
+            '<input type="text" id="appReason" placeholder="e.g. Approved binary upgrade / Ticket #1234" required>' +
+            "</div>" +
+            "</div>" +
+            '<div class="config-actions audit-actions">' +
+            '<button type="button" id="rejectAppBaselineBtn" class="btn btn-secondary btn-reject-alt">&#10007; Reject Changes</button>' +
+            '<button type="button" id="approveAppBaselineBtn" class="btn btn-primary btn-approve-alt">&#10003; Approve and Update Baseline</button>' +
+            "</div>" +
+            "</div>" +
+            "</section>";
+          var btnApprove = q("approveAppBaselineBtn");
+          if (btnApprove) {
+            btnApprove.addEventListener("click", function () {
+              var user = (q("appApprover") ? q("appApprover").value : "").trim();
+              var reason = (q("appReason") ? q("appReason").value : "").trim();
+              decideCategoryBaseline("app", "approve", appData, user, reason);
+            });
+          }
+          var btnReject = q("rejectAppBaselineBtn");
+          if (btnReject) {
+            btnReject.addEventListener("click", function () {
+              var user = (q("appApprover") ? q("appApprover").value : "").trim();
+              var reason = (q("appReason") ? q("appReason").value : "").trim();
+              decideCategoryBaseline("app", "reject", {}, user, reason);
+            });
+          }
+        } else {
+          cont.innerHTML = "";
+        }
+      });
+  }
+
+
+  function renderNetworkAudit() {
+    var cont = q("netAuditContent");
+    if (!cont) return;
+    var netDiff = (thresholdData && thresholdData.network_diff) || {};
+    if (
+      !netDiff.category &&
+      reports.length &&
+      reports[reports.length - 1].data.network_diff
+    ) {
+      netDiff = reports[reports.length - 1].data.network_diff;
+    }
+    var totalNetChanges = Object.keys(netDiff.modified_settings || {}).length;
+
+
+    if (!totalNetChanges) {
+      cont.innerHTML = "";
+      return;
+    }
+
+
+    var sid = _serverIdFromCentralPath();
+    var statusUrl = sid ? "/api/server/" + sid + "/status" : "/api/status";
+
+
+    fetch(statusUrl)
+      .then(function (r) {
+        if (!r.ok) throw new Error();
+        return r.json();
+      })
+      .then(function (data) {
+        var catStatus = (data.categories && data.categories.network) || {};
+        var isApproved = catStatus.status === "approved";
+        var isRejected = catStatus.status === "rejected";
+
+        if (isApproved || isRejected) {
+          var statusDot = isApproved ? "dot-added" : "dot-deleted";
+          var statusBadge = isApproved
+            ? "status-pill approved"
+            : "status-pill rejected";
+          cont.innerHTML =
+            '<section class="panel audit-panel">' +
+            '<h2 class="panel-title"><span class="panel-dot ' +
+            statusDot +
+            '"></span>Network Baseline Decision Recorded</h2>' +
+            '<div class="audit-body">' +
+            '<div class="audit-decision-row">' +
+            '<span class="' +
+            statusBadge +
+            '">' +
+            (isApproved ? "&#10003; APPROVED" : "&#10007; REJECTED") +
+            "</span>" +
+            '<span class="audit-decision-meta">' +
+            (catStatus.timestamp
+              ? " &bull; " + esc(formatDate(catStatus.timestamp))
+              : "") +
+            "</span>" +
+            "</div>" +
+            "</div>" +
+            "</section>";
+        } else if (totalNetChanges > 0) {
+          cont.innerHTML =
+            '<section class="panel audit-panel">' +
+            '<h2 class="panel-title"><span class="panel-dot dot-alert"></span>Pending Network Baseline Approval</h2>' +
+            '<div class="audit-body">' +
+            '<p class="audit-caption"><span class="audit-warn-count">' +
+            totalNetChanges +
+            " detected network configuration change(s)</span> vs approved baseline</p>" +
+            '<div class="config-form audit-controls">' +
+            '<div class="form-group">' +
+            '<label for="netApprover">Approver Name <span class="req">*</span></label>' +
+            '<input type="text" id="netApprover" autocomplete="name" placeholder="e.g. John Doe / Team Lead" required>' +
+            "</div>" +
+            '<div class="form-group">' +
+            '<label for="netReason">Reason / Ticket Note <span class="req">*</span></label>' +
+            '<input type="text" id="netReason" placeholder="e.g. Scheduled network maintenance / Ticket #1234" required>' +
+            "</div>" +
+            "</div>" +
+            '<div class="config-actions audit-actions">' +
+            '<button type="button" id="rejectNetBaselineBtn" class="btn btn-secondary btn-reject-alt">&#10007; Reject Changes</button>' +
+            '<button type="button" id="approveNetBaselineBtn" class="btn btn-primary btn-approve-alt">&#10003; Approve and Update Baseline</button>' +
+            "</div>" +
+            "</div>" +
+            "</section>";
+
+          var btnApprove = q("approveNetBaselineBtn");
+          if (btnApprove) {
+            btnApprove.addEventListener("click", function () {
+              var user = (
+                q("netApprover") ? q("netApprover").value : ""
+              ).trim();
+              var reason = (q("netReason") ? q("netReason").value : "").trim();
+              decideCategoryBaseline(
+                "network",
+                "approve",
+                networkData,
+                user,
+                reason,
+              );
+            });
+          }
+          var btnReject = q("rejectNetBaselineBtn");
+          if (btnReject) {
+            btnReject.addEventListener("click", function () {
+              var user = (
+                q("netApprover") ? q("netApprover").value : ""
+              ).trim();
+              var reason = (q("netReason") ? q("netReason").value : "").trim();
+              decideCategoryBaseline("network", "reject", {}, user, reason);
+            });
+          }
+        } else {
+          cont.innerHTML = "";
+        }
+      })
+      .catch(function () {
+        if (totalNetChanges > 0) {
+          cont.innerHTML =
+            '<section class="panel audit-panel">' +
+            '<h2 class="panel-title"><span class="panel-dot dot-alert"></span>Pending Network Baseline Approval</h2>' +
+            '<div class="audit-body">' +
+            '<p class="audit-caption"><span class="audit-warn-count">' +
+            totalNetChanges +
+            " detected network configuration change(s)</span> vs approved baseline</p>" +
+            '<div class="config-form audit-controls">' +
+            '<div class="form-group">' +
+            '<label for="netApprover">Approver Name <span class="req">*</span></label>' +
+            '<input type="text" id="netApprover" autocomplete="name" placeholder="e.g. John Doe / Team Lead" required>' +
+            "</div>" +
+            '<div class="form-group">' +
+            '<label for="netReason">Reason / Ticket Note <span class="req">*</span></label>' +
+            '<input type="text" id="netReason" placeholder="e.g. Scheduled network maintenance / Ticket #1234" required>' +
+            "</div>" +
+            "</div>" +
+            '<div class="config-actions audit-actions">' +
+            '<button type="button" id="rejectNetBaselineBtn" class="btn btn-secondary btn-reject-alt">&#10007; Reject Changes</button>' +
+            '<button type="button" id="approveNetBaselineBtn" class="btn btn-primary btn-approve-alt">&#10003; Approve and Update Baseline</button>' +
+            "</div>" +
+            "</div>" +
+            "</section>";
+          var btnApprove = q("approveNetBaselineBtn");
+          if (btnApprove) {
+            btnApprove.addEventListener("click", function () {
+              var user = (q("netApprover") ? q("netApprover").value : "").trim();
+              var reason = (q("netReason") ? q("netReason").value : "").trim();
+              decideCategoryBaseline(
+                "network",
+                "approve",
+                networkData,
+                user,
+                reason,
+              );
+            });
+          }
+          var btnReject = q("rejectNetBaselineBtn");
+          if (btnReject) {
+            btnReject.addEventListener("click", function () {
+              var user = (q("netApprover") ? q("netApprover").value : "").trim();
+              var reason = (q("netReason") ? q("netReason").value : "").trim();
+              decideCategoryBaseline("network", "reject", {}, user, reason);
+            });
+          }
+        } else {
+          cont.innerHTML = "";
+        }
+      });
+  }
+
+
+  function decideCategoryBaseline(
+    category,
+    action,
+    snapshotData,
+    user,
+    reason,
+  ) {
+    if (!user || !reason) {
+      showToast("Approver name and reason are required", "error");
+      return;
+    }
+    var sid = _serverIdFromCentralPath();
+    var url = sid ? "/api/server/" + sid + "/" + action : "/api/" + action;
+
+
+    fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        category: category,
+        snapshot_data: snapshotData,
+        user: user,
+        reason: reason,
+      }),
+    })
+      .then(function (r) {
+        return r.json().then(function (d) {
+          if (!r.ok)
+            throw new Error(d.error || category + " " + action + " failed");
+          return d;
+        });
+      })
+      .then(function (d) {
+        showToast(
+          (category === "app"
+            ? "Application"
+            : category === "network"
+              ? "Network"
+              : "File & directory") +
+            " baseline " +
+            action +
+            "d successfully",
+          "success",
+        );
+        if (category === "drift") {
+          renderDriftAudit();
+        } else if (category === "app") {
+          if (action === "approve") {
+            if (thresholdData.app_diff) thresholdData.app_diff = {};
+            if (reports.length && reports[reports.length - 1].data) {
+              reports[reports.length - 1].data.app_diff = {};
+            }
+          }
+          renderAppAudit();
+        } else if (category === "network") {
+          if (action === "approve") {
+            if (thresholdData.network_diff) thresholdData.network_diff = {};
+            if (reports.length && reports[reports.length - 1].data) {
+              reports[reports.length - 1].data.network_diff = {};
+            }
+            var banner = q("netDriftBanner");
+            if (banner) banner.style.display = "none";
+          }
+          renderNetworkAudit();
+        }
+        refreshCategoryStatus();
+        renderAuditPipeline();
+        updateTabBadges();
+        _notifyPendingChanged();
       })
       .catch(function (e) {
         showToast(e.message, "error");
       });
   }
+
+
+  /* ── Unified approval bar ────────────────────────────── */
+  // One decision surface for all three targets. Every visual (toggle dots,
+  // tab badge, progress, button state) is derived from approvalState, so the
+  // badge can never disagree with the list.
+  var approvalState = {
+    report: "none",
+    files: "none",
+    snapshot: "none",
+    network: "none",
+  };
+  var _decisionBusy = {};
+  var TARGET_CATEGORY = { files: "drift", snapshot: "app", network: "network" };
+
+
+  function currentReportBasename() {
+    if (!selectedIndices || selectedIndices.length !== 1) return "";
+    var entry = reports[selectedIndices[0]];
+    return entry && entry.file
+      ? entry.file.split("/").pop().split("\\").pop()
+      : "";
+  }
+
+
+  function activeReportData() {
+    if (!selectedIndices || selectedIndices.length !== 1) return {};
+    return (reports[selectedIndices[0]] || {}).data || {};
+  }
+
+
+  function fileChangeCount() {
+    var s = activeReportData().summary || {};
+    return (s.added || 0) + (s.deleted || 0) + (s.modified || 0);
+  }
+
+
+  function appChangeCount() {
+    var d = activeReportData().app_diff || thresholdData.app_diff || {};
+    return (
+      (d.added_apps || []).length +
+      (d.removed_apps || []).length +
+      (d.updated_apps || []).length
+    );
+  }
+
+
+  function netChangeCount() {
+    var d = activeReportData().network_diff || thresholdData.network_diff || {};
+    return Object.keys(d.modified_settings || {}).length;
+  }
+
+
+  function _mapCategoryStatus(cat, changeCount) {
+    if (!changeCount || changeCount === 0) return "none";
+    if (!cat) return "pending";
+    var s = cat.status;
+    if (s === "no_changes") return "none";
+    if (s === "pending") return "pending";
+    if (s === "approved" || s === "rejected") return s;
+    return "pending";
+  }
+
+
+  function refreshCategoryStatus() {
+    var sid = _serverIdFromCentralPath();
+    var url = sid ? "/api/server/" + sid + "/status" : "/api/status";
+    return fetch(url)
+      .then(function (r) {
+        if (!r.ok) throw new Error();
+        return r.json();
+      })
+      .then(function (d) {
+        var cats = d.categories || {};
+        approvalState.files =
+          fileChangeCount() > 0
+            ? _mapCategoryStatus(cats.drift, fileChangeCount())
+            : "none";
+        approvalState.snapshot = _mapCategoryStatus(cats.app, appChangeCount());
+        approvalState.network = _mapCategoryStatus(
+          cats.network,
+          netChangeCount(),
+        );
+        approvalState.report = computeReportStatus();
+        if (approvalState.report === "approved") {
+          var bn = currentReportBasename();
+          if (bn && typeof window.approveReport === "function") {
+            var rMeta = (thresholdData.reports || {})[bn] || {};
+            if (rMeta.status !== "approved") {
+              var user =
+                (q("approverName") && q("approverName").value.trim()) ||
+                "dashboard_user";
+              window.approveReport(bn, {
+                silent: true,
+                reason: "Auto-approved: all category changes approved",
+                user: user,
+              });
+            }
+          }
+        }
+        updateApprovalBar();
+      })
+      .catch(function () {
+        // Endpoint unavailable (older agent): fall back to change counts only.
+        approvalState.files = fileChangeCount() ? "pending" : "none";
+        approvalState.snapshot = appChangeCount() ? "pending" : "none";
+        approvalState.network = netChangeCount() ? "pending" : "none";
+        approvalState.report = computeReportStatus();
+        updateApprovalBar();
+      });
+  }
+
+
+  function computeReportStatus() {
+    var basename = currentReportBasename();
+    var totalChanges = fileChangeCount() + appChangeCount() + netChangeCount();
+    if (totalChanges === 0) {
+      return "none";
+    }
+    if (
+      approvalState.files === "pending" ||
+      approvalState.snapshot === "pending" ||
+      approvalState.network === "pending"
+    ) {
+      return "pending";
+    }
+    if (
+      approvalState.files === "rejected" ||
+      approvalState.snapshot === "rejected" ||
+      approvalState.network === "rejected"
+    ) {
+      return "rejected";
+    }
+    if (
+      approvalState.files === "approved" ||
+      approvalState.snapshot === "approved" ||
+      approvalState.network === "approved"
+    ) {
+      return "approved";
+    }
+    if (!basename) {
+      return "pending";
+    }
+    var meta = (thresholdData.reports || {})[basename];
+    if (meta && meta.status) {
+      return meta.status;
+    }
+    return "pending";
+  }
+
+
+  function updateApprovalBar() {
+    var bar = q("decisionBar");
+    if (!bar) return;
+
+
+    approvalState.report = computeReportStatus();
+
+
+    /* Requirement 2: After switching tabs, dont show the tab bar overall approvals inputs */
+    var showTabBarApprovals = currentTarget === "report";
+    var barActions = q("tabBarApprovalActions");
+    var barTarget = q("tabBarDecisionTarget");
+    if (barActions) barActions.style.display = showTabBarApprovals ? "" : "none";
+    if (barTarget) barTarget.style.display = showTabBarApprovals ? "" : "none";
+
+
+    var comparing = comparisonMode() || (selectedIndices || []).length !== 1;
+    var banner = q("compareBanner");
+    if (banner) {
+      banner.style.display = comparing ? "" : "none";
+      var txt = q("compareBannerText");
+      if (txt && comparing) {
+        txt.textContent = (selectedIndices || [])
+          .map(function (i) {
+            return (reports[i] || {}).label || "";
+          })
+          .filter(Boolean)
+          .join("  vs  ");
+      }
+    }
+
+
+    var pending = 0;
+    var decided = 0;
+    var total = 0;
+    var CATEGORY_TARGETS = ["files", "snapshot", "network"];
+    TARGET_IDS.forEach(function (t) {
+      var st = approvalState[t];
+      var dot = document.querySelector('[data-dot="' + t + '"]');
+      if (dot) {
+        dot.className = "seg-toggle__dot seg-toggle__dot--" + st;
+        dot.title = t + ": " + st;
+      }
+    });
+
+    CATEGORY_TARGETS.forEach(function (t) {
+      var st = approvalState[t];
+      if (st === "none") return;
+      total++;
+      if (st === "pending") pending++;
+      else decided++;
+    });
+
+
+    var badge = q("badge-approval");
+    if (badge) {
+      badge.textContent = String(pending);
+      badge.style.display = pending > 0 ? "inline-flex" : "none";
+    }
+
+
+    var label = q("progressLabel");
+    if (label) label.textContent = decided + " of " + total + " reviewed";
+    var fill = q("progressFill");
+    if (fill) fill.style.width = (total ? (decided / total) * 100 : 0) + "%";
+    var track = q("progressTrack");
+    if (track) {
+      track.setAttribute("aria-valuemax", String(total));
+      track.setAttribute("aria-valuenow", String(decided));
+    }
+
+
+    var sub = q("reviewSubtitle");
+    if (sub) {
+      var bn = currentReportBasename();
+      sub.textContent = comparing
+        ? "Comparing " + (selectedIndices || []).length + " reports"
+        : bn
+          ? bn +
+            " · " +
+            (((thresholdData.reports || {})[bn] || {}).change_count || 0) +
+            " changes detected"
+          : "No report selected";
+    }
+
+
+    var st = approvalState[currentTarget];
+    var target = q("decisionTarget");
+    if (target) {
+      target.textContent =
+        currentTarget === "report"
+          ? (st === "none"
+              ? "all changes across tabs"
+              : "all pending changes across tabs")
+          : currentTarget === "files"
+            ? "file & directory baseline"
+            : currentTarget === "snapshot"
+              ? "application snapshot baseline"
+              : "network baseline";
+    }
+    var statusEl = q("decisionStatus");
+    if (statusEl) {
+      statusEl.textContent =
+        st === "none" ? "• no changes to review" : "status: " + st;
+      statusEl.className = "decide-target__status decide-target__status--" + st;
+    }
+
+
+    var locked =
+      comparing || st !== "pending" || !!_decisionBusy[currentTarget];
+    var ba = q("btnApprove");
+    var br = q("btnReject");
+    if (ba) ba.disabled = locked;
+    if (br) br.disabled = locked;
+  }
+
+
+  function _afterDecision(resp) {
+    if (resp && resp.auto_rejected && resp.auto_rejected.length) {
+      showToast(
+        resp.auto_rejected.length + " superseded report(s) auto-rejected",
+        "info",
+      );
+    }
+    refreshCategoryStatus();
+    renderAuditPipeline();
+  }
+
+
+  function decideCurrent(action) {
+    var target = currentTarget;
+    if (comparisonMode() || (selectedIndices || []).length !== 1) {
+      showToast("Exit compare mode before deciding", "error");
+      return;
+    }
+    if (approvalState[target] !== "pending" || _decisionBusy[target]) return;
+
+
+    var user = (q("approverName").value || "").trim();
+    var reason = (q("decisionReason").value || "").trim();
+    if (!user) {
+      q("approverName").focus();
+      showToast("Approver name is required", "error");
+      return;
+    }
+    if (!reason) {
+      q("decisionReason").classList.add("invalid");
+      q("decisionReason").focus();
+      showToast("A reason or ticket number is required", "error");
+      setTimeout(function () {
+        q("decisionReason").classList.remove("invalid");
+      }, 1400);
+      return;
+    }
+    try {
+      localStorage.setItem(APPROVER_KEY, user);
+    } catch (e) {}
+
+
+    _decisionBusy[target] = true;
+    updateApprovalBar();
+
+
+    if (target === "report") {
+      var basename = currentReportBasename();
+      if (basename) {
+        var fn =
+          action === "approve" ? window.approveReport : window.rejectReport;
+        fn(basename, { reason: reason, user: user });
+
+        var snapId = snapshotIdForReport(reports[selectedIndices[0]]);
+        if (snapId) {
+          decideSnapshot(action, snapId, {
+            user: user,
+            reason: reason,
+            silent: true,
+          });
+        }
+      }
+
+      // Settle category baselines across tabs if pending
+      if (approvalState.files === "pending") {
+        var entry = reports[selectedIndices[0]];
+        decideCategoryBaseline(
+          "drift",
+          action,
+          (entry && entry.data && entry.data.snapshot) || (snapId ? { snapshot: snapId } : {}),
+          user,
+          reason
+        );
+      }
+      if (approvalState.snapshot === "pending") {
+        decideCategoryBaseline("app", action, appData || {}, user, reason);
+      }
+      if (approvalState.network === "pending") {
+        decideCategoryBaseline("network", action, networkData || {}, user, reason);
+      }
+
+      setTimeout(function () {
+        _decisionBusy[target] = false;
+        if (q("decisionReason")) q("decisionReason").value = "";
+        refreshCategoryStatus();
+        renderAuditPipeline();
+        updateApprovalBar();
+      }, 700);
+      return;
+    }
+
+
+    var category = TARGET_CATEGORY[target];
+    var snapshotData =
+      category === "app"
+        ? appData || {}
+        : category === "network"
+          ? networkData || {}
+          : {};
+    decideCategoryBaseline(category, action, snapshotData, user, reason);
+    setTimeout(function () {
+      _decisionBusy[target] = false;
+      if (q("decisionReason")) q("decisionReason").value = "";
+      refreshCategoryStatus();
+      renderAuditPipeline();
+      updateApprovalBar();
+    }, 700);
+  }
+
+
+  function renderAuditPipeline() {
+    var list = q("auditPipelineList");
+    if (!list) return;
+    var sid = _serverIdFromCentralPath();
+    var url = sid
+      ? "/api/server/" + sid + "/audit-status"
+      : "/api/audit-status";
+    fetch(url)
+      .then(function (r) {
+        if (!r.ok) throw new Error();
+        return r.json();
+      })
+      .then(function (d) {
+        var history = (d.history || []).slice().reverse();
+        var counter = q("auditCount");
+        if (counter)
+          counter.textContent =
+            history.length +
+            (history.length === 1 ? " decision" : " decisions");
+        if (!history.length) {
+          list.innerHTML =
+            '<div class="net-empty">No approval decisions recorded yet.</div>';
+          return;
+        }
+        list.innerHTML = history
+          .map(function (rec) {
+            var approved =
+              (rec.action || "").toLowerCase().indexOf("approve") !== -1;
+            return (
+              '<div class="tl-item">' +
+              '<span class="tl-item__node tl-item__node--' +
+              (approved ? "approved" : "rejected") +
+              '"></span>' +
+              '<div class="tl-item__body">' +
+              '<div class="tl-item__top">' +
+              '<span class="status-pill ' +
+              (approved ? "approved" : "rejected") +
+              '">' +
+              (approved ? "&#10003; Approved" : "&#10007; Rejected") +
+              "</span>" +
+              '<span class="tl-item__kind">' +
+              esc(rec.target_type || "snapshot") +
+              "</span>" +
+              '<span class="tl-item__target">' +
+              esc(rec.snapshot_id || "—") +
+              "</span>" +
+              "</div>" +
+              '<div class="tl-item__meta">' +
+              esc(formatDate(rec.timestamp || "")) +
+              " · " +
+              esc(rec.user || "—") +
+              "</div>" +
+              (rec.reason
+                ? '<div class="tl-item__reason">' + esc(rec.reason) + "</div>"
+                : "") +
+              "</div></div>"
+            );
+          })
+          .join("");
+      })
+      .catch(function () {
+        list.innerHTML =
+          '<div class="net-empty">Audit history is unavailable.</div>';
+      });
+  }
+
+
+  var APPROVER_KEY = "sssnap_approver";
+
+
+  var _btnApprove = q("btnApprove");
+  if (_btnApprove)
+    _btnApprove.addEventListener("click", function () {
+      decideCurrent("approve");
+    });
+  var _btnReject = q("btnReject");
+  if (_btnReject)
+    _btnReject.addEventListener("click", function () {
+      decideCurrent("reject");
+    });
+  var _exitCompare = q("exitCompareBtn");
+  if (_exitCompare)
+    _exitCompare.addEventListener("click", function () {
+      if (els.compareReportsToggle) els.compareReportsToggle.checked = false;
+      if (reports.length) selectOnly(reports.length - 1);
+      updateApprovalBar();
+    });
+
+
+  document.addEventListener("keydown", function (e) {
+    if (
+      /^(INPUT|SELECT|TEXTAREA)$/.test((e.target.tagName || "").toUpperCase())
+    )
+      return;
+    if (q("approvalView") && q("approvalView").style.display === "none") return;
+    if (e.key === "1") switchTarget("report");
+    else if (e.key === "2") switchTarget("files");
+    else if (e.key === "3") switchTarget("snapshot");
+    else if (e.key === "4") switchTarget("network");
+    else if (e.key === "a" || e.key === "A") {
+      if (currentTarget === "report") decideCurrent("approve");
+    }
+    else if (e.key === "r" || e.key === "R") {
+      if (currentTarget === "report") decideCurrent("reject");
+    }
+    else if (e.key === "/") {
+      e.preventDefault();
+      if (q("decisionReason")) q("decisionReason").focus();
+    }
+  });
+
 
   /* ── Config CRUD ─────────────────────────────────────── */
   var _isCentralMode = !!window.location.pathname.match(
@@ -1269,11 +3352,13 @@
     q("cfgDashHost").value = db.host || "127.0.0.1";
     q("cfgDashPort").value = db.port || 8080;
 
+
     var paths = cfg.paths || [];
     if (paths.length === 0) {
       paths = [{ path: "/etc", include_content: false, recursive: true }];
       if (configData) configData.paths = paths;
     }
+
 
     // Cross-reference paths against snapshot data to annotate missing entries.
     // `reports` is the global list from the embedded JSON; use the latest entry's snapshot.
@@ -1291,6 +3376,7 @@
     } catch (e) {
       /* non-fatal */
     }
+
 
     renderPaths(paths);
     renderUncoveredPathsBanner(paths);
@@ -1561,8 +3647,9 @@
       var ep = row.querySelector(".exc-path").value.trim();
       var eg = row.querySelector(".exc-pattern").value.trim();
       var ec = row.querySelector(".exc-content").checked;
+      var esk = row.querySelector(".exc-skip").checked;
       if (ep || eg) {
-        var exc = { include_content: ec };
+        var exc = { include_content: ec, skip: esk };
         if (ep) exc.path = ep;
         else exc.pattern = eg;
         exceptions.push(exc);
@@ -1594,13 +3681,18 @@
       .map(function (e) {
         return (
           '<div class="exception-row">' +
-          '<input type="text" class="exc-path" placeholder="Exact path" value="' +
+          '<input type="text" class="exc-path" placeholder="Exact path (e.g. /etc/nginx/cache)" value="' +
           esc(e.path || "") +
           '">' +
-          '<input type="text" class="exc-pattern" placeholder="Glob pattern" value="' +
+          '<input type="text" class="exc-pattern" placeholder="Glob (e.g. /etc/nginx/**/*.bak)" value="' +
           esc(e.pattern || "") +
           '">' +
-          '<label class="toggle-label"><input type="checkbox" class="exc-content"' +
+          '<label class="toggle-label exc-skip-label" title="Skip: fully exclude from monitoring">' +
+          '<input type="checkbox" class="exc-skip"' +
+          (e.skip ? " checked" : "") +
+          ">Skip</label>" +
+          '<label class="toggle-label">' +
+          '<input type="checkbox" class="exc-content"' +
           (e.include_content ? " checked" : "") +
           ">Content</label>" +
           '<button type="button" class="btn btn-xs btn-danger remove-exc-btn">&times;</button>' +
@@ -1614,8 +3706,9 @@
     var r = document.createElement("div");
     r.className = "exception-row";
     r.innerHTML =
-      '<input type="text" class="exc-path" placeholder="Exact path">' +
-      '<input type="text" class="exc-pattern" placeholder="Glob pattern">' +
+      '<input type="text" class="exc-path" placeholder="Exact path (e.g. /etc/nginx/cache)">' +
+      '<input type="text" class="exc-pattern" placeholder="Glob (e.g. /etc/nginx/**/*.bak)">' +
+      '<label class="toggle-label exc-skip-label" title="Skip: fully exclude from monitoring"><input type="checkbox" class="exc-skip">Skip</label>' +
       '<label class="toggle-label"><input type="checkbox" class="exc-content">Content</label>' +
       '<button type="button" class="btn btn-xs btn-danger remove-exc-btn">&times;</button>';
     c.appendChild(r);
@@ -1644,6 +3737,7 @@
     showToast("Configuration reloaded", "info");
   });
 
+
   /* ── Init ────────────────────────────────────────────── */
   if (!reports.length) {
     els.subtitle.textContent = "No report data available";
@@ -1659,6 +3753,26 @@
     renderMultiple(selectedIndices);
   }
 
+
+  updateTabBadges();
+  renderDriftAudit();
+  renderAppAudit();
+  renderNetworkAudit();
+
+
+  try {
+    var _savedApprover = localStorage.getItem(APPROVER_KEY);
+    if (_savedApprover && q("approverName"))
+      q("approverName").value = _savedApprover;
+  } catch (e) {}
+
+
+  switchTarget("report");
+  refreshCategoryStatus();
+  renderAuditPipeline();
+
+
   fetchReportStatus();
   setInterval(fetchReportStatus, 30000);
 })();
+

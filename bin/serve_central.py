@@ -2,26 +2,9 @@
 """
 serve_central.py
 ================
-
-
-
-
-
-
-
-
 Central hub for the ServerSnap multi-server platform.
-
-
 Agents running server_snapshot.py POST their snapshots here; humans browse
 the fleet dashboard at http://<central-host>:<port>/.
-
-
-
-
-
-
-
 
 Design goals (matching server_snapshot.py / serve_dashboard.py):
   - Stdlib only, no external dependencies.
@@ -34,22 +17,10 @@ Design goals (matching server_snapshot.py / serve_dashboard.py):
   - Config cascade: global platform_config.json defaults, per-server
     override.json supersedes (loaded fresh on each relevant request).
 
-
-
-
-
-
-
-
 SECURITY WARNING — read before exposing beyond localhost:
   This server speaks plain HTTP with NO TLS. The API key and session cookie
   travel in the clear. In production, put a reverse proxy (nginx, Caddy)
   in front for TLS termination. The default bind address is 127.0.0.1.
-
-
-
-
-
 
 
 
@@ -58,13 +29,8 @@ Exit codes:
   2 - fatal error (bad arguments, bind failure, config error)
 
 
-
-
-
-
-
-
 Usage:
+
   serve_central.py --config /path/to/platform_config.json
   serve_central.py --config platform_config.json --host 0.0.0.0 --port 8090
   serve_central.py --hash-password mysecretpassword
@@ -72,20 +38,7 @@ Usage:
 
 """
 
-
-
-
-
-
-
-
 from __future__ import annotations
-
-
-
-
-
-
 
 
 import argparse
@@ -102,14 +55,11 @@ import stat
 import sys
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 
-
-
-
-
+IST = timezone(timedelta(hours=5, minutes=30))
 
 
 SCRIPT_VERSION = "1.0.0"
@@ -133,7 +83,13 @@ ALLOWED_OVERRIDE_KEYS = {"stale_threshold_minutes", "history_retention_count"}
 
 
 # Keys stripped from agent_config.json when returned via GET /api/server/<id>/config.
-AGENT_CONFIG_SENSITIVE_KEYS = {"api_key", "secret_key", "users", "_comment", "_comment_general"}
+AGENT_CONFIG_SENSITIVE_KEYS = {
+    "api_key",
+    "secret_key",
+    "users",
+    "_comment",
+    "_comment_general",
+}
 
 
 # Keys beginning with this prefix are comment-only and always stripped.
@@ -145,31 +101,13 @@ AGENT_CONFIG_COMMENT_PREFIX = "_comment"
 # ---------------------------------------------------------------------------
 
 
-
-
-
-
-
-
 class CentralError(Exception):
     """Raised for any fatal problem starting the central server."""
-
-
-
-
-
-
 
 
 # ---------------------------------------------------------------------------
 # Config helpers
 # ---------------------------------------------------------------------------
-
-
-
-
-
-
 
 
 def load_platform_config(config_path: str) -> Dict[str, Any]:
@@ -185,14 +123,18 @@ def load_platform_config(config_path: str) -> Dict[str, Any]:
         if not raw.get(key):
             raise CentralError(f"platform_config.json is missing required key: '{key}'")
     if not raw.get("users"):
-        raise CentralError("platform_config.json must have at least one user in 'users'")
+        raise CentralError(
+            "platform_config.json must have at least one user in 'users'"
+        )
     return raw
 
 
-
-
-def get_effective_config(global_cfg: Dict[str, Any], data_dir: str, server_id: str) -> Dict[str, Any]:
+def get_effective_config(
+    global_cfg: Dict[str, Any], data_dir: str, server_id: str
+) -> Dict[str, Any]:
     """Merge global config with per-server override.json (override wins).
+
+
 
 
     Implements Task 4.3 / Design D7.
@@ -209,10 +151,10 @@ def get_effective_config(global_cfg: Dict[str, Any], data_dir: str, server_id: s
     return effective
 
 
-
-
 def validate_agent_config(data: Any) -> List[str]:
     """Server-side validation of a full agent config dict.
+
+
 
 
     Returns a list of error strings; empty list means the config is valid.
@@ -222,21 +164,19 @@ def validate_agent_config(data: Any) -> List[str]:
     if not isinstance(data, dict):
         return ["Config must be a JSON object"]
 
-
     errors: List[str] = []
-
 
     # Required scalar fields.
     for key in ("server_id", "snapshot_dir", "report_dir"):
         if not data.get(key):
             errors.append(f"Missing required field: '{key}'")
 
-
     # server_id must be filesystem-safe.
     sid = str(data.get("server_id", "")).strip()
     if sid and not all(c.isalnum() or c in "-_" for c in sid):
-        errors.append("'server_id' must contain only letters, digits, hyphens, and underscores")
-
+        errors.append(
+            "'server_id' must contain only letters, digits, hyphens, and underscores"
+        )
 
     def _is_abs(p: str) -> bool:
         """True if p looks like an absolute path on Linux OR Windows."""
@@ -250,12 +190,12 @@ def validate_agent_config(data: Any) -> List[str]:
             return True
         return False
 
-
     for key in ("snapshot_dir", "report_dir"):
         val = str(data.get(key, "")).strip()
         if val and not _is_abs(val):
-            errors.append(f"'{key}' must be an absolute path (e.g. /path/to/dir or C:\\path\\to\\dir)")
-
+            errors.append(
+                f"'{key}' must be an absolute path (e.g. /path/to/dir or C:\\path\\to\\dir)"
+            )
 
     # paths list.
     paths = data.get("paths")
@@ -276,17 +216,13 @@ def validate_agent_config(data: Any) -> List[str]:
             elif not _is_abs(p):
                 errors.append(f"paths[{i}]: 'path' must be absolute")
 
-
     # Optional numeric fields.
     for key in ("max_content_size_bytes", "retention_count", "change_threshold"):
         val = data.get(key)
         if val is not None and not isinstance(val, (int, float)):
             errors.append(f"'{key}' must be a number if provided")
 
-
     return errors
-
-
 
 
 def _warn_if_insecure_permissions(path: str) -> None:
@@ -304,39 +240,27 @@ def _warn_if_insecure_permissions(path: str) -> None:
         pass
 
 
-
-
-
-
-
-
 # ---------------------------------------------------------------------------
 # Password hashing  (Task 3.1)
 # ---------------------------------------------------------------------------
 
 
-
-
-
-
-
-
 PBKDF2_ITERATIONS = 260_000
-
-
 
 
 def hash_password(plaintext: str) -> str:
     """Hash a plaintext password with PBKDF2-HMAC-SHA256.
 
 
+
+
     Returns ``salt_hex:hash_hex`` suitable for storage in platform_config.json.
     """
     salt = secrets.token_bytes(16)
-    dk = hashlib.pbkdf2_hmac("sha256", plaintext.encode("utf-8"), salt, PBKDF2_ITERATIONS)
+    dk = hashlib.pbkdf2_hmac(
+        "sha256", plaintext.encode("utf-8"), salt, PBKDF2_ITERATIONS
+    )
     return f"{salt.hex()}:{dk.hex()}"
-
-
 
 
 def verify_password(plaintext: str, stored: str) -> bool:
@@ -347,14 +271,10 @@ def verify_password(plaintext: str, stored: str) -> bool:
         expected = bytes.fromhex(hash_hex)
     except (ValueError, TypeError):
         return False
-    actual = hashlib.pbkdf2_hmac("sha256", plaintext.encode("utf-8"), salt, PBKDF2_ITERATIONS)
+    actual = hashlib.pbkdf2_hmac(
+        "sha256", plaintext.encode("utf-8"), salt, PBKDF2_ITERATIONS
+    )
     return hmac.compare_digest(actual, expected)
-
-
-
-
-
-
 
 
 # ---------------------------------------------------------------------------
@@ -362,14 +282,12 @@ def verify_password(plaintext: str, stored: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-
-
-
-
-
-
-def make_session_cookie(username: str, secret: str, ttl_hours: int = SESSION_TTL_HOURS) -> str:
+def make_session_cookie(
+    username: str, secret: str, ttl_hours: int = SESSION_TTL_HOURS
+) -> str:
     """Return a signed session cookie value.
+
+
 
 
     Format: ``base64(json_payload).<hmac_hex>``
@@ -378,10 +296,10 @@ def make_session_cookie(username: str, secret: str, ttl_hours: int = SESSION_TTL
     exp = int(time.time()) + ttl_hours * 3600
     payload_json = json.dumps({"u": username, "exp": exp}, separators=(",", ":"))
     payload_b64 = base64.b64encode(payload_json.encode("utf-8")).decode("ascii")
-    sig = hmac.new(secret.encode("utf-8"), payload_b64.encode("ascii"), "sha256").hexdigest()
+    sig = hmac.new(
+        secret.encode("utf-8"), payload_b64.encode("ascii"), "sha256"
+    ).hexdigest()
     return f"{payload_b64}.{sig}"
-
-
 
 
 def verify_session_cookie(cookie_value: str, secret: str) -> Optional[str]:
@@ -390,7 +308,9 @@ def verify_session_cookie(cookie_value: str, secret: str) -> Optional[str]:
         payload_b64, sig = cookie_value.rsplit(".", 1)
     except ValueError:
         return None
-    expected_sig = hmac.new(secret.encode("utf-8"), payload_b64.encode("ascii"), "sha256").hexdigest()
+    expected_sig = hmac.new(
+        secret.encode("utf-8"), payload_b64.encode("ascii"), "sha256"
+    ).hexdigest()
     if not hmac.compare_digest(sig, expected_sig):
         return None
     try:
@@ -407,14 +327,10 @@ def verify_session_cookie(cookie_value: str, secret: str) -> Optional[str]:
 # ---------------------------------------------------------------------------
 
 
-
-
-
-
-
-
 def store_push(data_dir: str, server_id: str, payload: Dict[str, Any]) -> None:
     """Persist an agent push payload to flat files under data_dir/server_id/.
+
+
 
 
     Writes:
@@ -427,23 +343,21 @@ def store_push(data_dir: str, server_id: str, payload: Dict[str, Any]) -> None:
     history_dir = os.path.join(server_dir, "history")
     os.makedirs(history_dir, exist_ok=True)
 
-
     # Strip dashboard HTML blob and config blob before storing in latest.json.
-    storage_payload = {k: v for k, v in payload.items() if k not in ("dashboard_html_b64", "config")}
+    storage_payload = {
+        k: v for k, v in payload.items() if k not in ("dashboard_html_b64", "config")
+    }
     storage_payload["last_seen"] = datetime.now(timezone.utc).isoformat()
-
 
     # Atomic write of latest.json
     latest_json = os.path.join(server_dir, "latest.json")
     _atomic_write_json(latest_json, storage_payload)
-
 
     # Store agent_config.json if the agent pushed its config.
     agent_cfg = payload.get("config")
     if isinstance(agent_cfg, dict):
         agent_config_path = os.path.join(server_dir, "agent_config.json")
         _atomic_write_json(agent_config_path, agent_cfg)
-
 
     # Decode and atomic write of dashboard HTML (if provided)
     dashboard_b64 = payload.get("dashboard_html_b64")
@@ -455,13 +369,135 @@ def store_push(data_dir: str, server_id: str, payload: Dict[str, Any]) -> None:
         except (ValueError, TypeError):
             pass  # Corrupt base64 — skip storing HTML
 
-
     # History entry (timestamped copy of storage_payload)
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     history_file = os.path.join(history_dir, f"{ts}_{server_id}.json")
     _atomic_write_json(history_file, storage_payload)
 
+    # Sync pending baseline changes into central approvals so dashboard and status APIs
+    # reflect incoming app, network, and drift changes needing review.
+    approvals_dir = os.path.join(server_dir, "approvals")
+    os.makedirs(approvals_dir, exist_ok=True)
+    pending_file = os.path.join(approvals_dir, f"pending_{server_id}.json")
+    pending_data: Dict[str, Any] = {}
+    if os.path.isfile(pending_file):
+        try:
+            with open(pending_file, "r", encoding="utf-8") as _pf:
+                loaded = json.load(_pf)
+                if isinstance(loaded, dict):
+                    pending_data = loaded
+        except Exception:
+            pending_data = {}
 
+    pending_modified = False
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    # 1. App diff
+    app_diff = payload.get("app_diff")
+    if isinstance(app_diff, dict):
+        has_app_changes = bool(
+            app_diff.get("added_apps")
+            or app_diff.get("removed_apps")
+            or app_diff.get("updated_apps")
+            or app_diff.get("status") == "changes_detected"
+        )
+        if has_app_changes:
+            pending_data["app"] = {
+                "timestamp": app_diff.get("timestamp")
+                or payload.get("snapshot_at")
+                or now_iso,
+                "changes": app_diff,
+                "status": "pending",
+                "created_at": now_iso,
+            }
+            pending_modified = True
+        elif "app" in pending_data:
+            pending_data.pop("app", None)
+            pending_modified = True
+    elif "app" in pending_data:
+        pending_data.pop("app", None)
+        pending_modified = True
+
+    # 2. Network diff
+    net_diff = payload.get("network_diff")
+    if isinstance(net_diff, dict):
+        has_net_changes = bool(
+            net_diff.get("modified_settings")
+            or net_diff.get("status") == "changes_detected"
+        )
+        if has_net_changes:
+            pending_data["network"] = {
+                "timestamp": net_diff.get("timestamp")
+                or payload.get("snapshot_at")
+                or now_iso,
+                "changes": net_diff,
+                "status": "pending",
+                "created_at": now_iso,
+            }
+            pending_modified = True
+        elif "network" in pending_data:
+            pending_data.pop("network", None)
+            pending_modified = True
+    elif "network" in pending_data:
+        pending_data.pop("network", None)
+        pending_modified = True
+
+    # 3. Drift (diff)
+    diff = payload.get("diff")
+    if isinstance(diff, dict):
+        has_drift_changes = bool(
+            diff.get("added")
+            or diff.get("deleted")
+            or diff.get("modified")
+        )
+        if has_drift_changes:
+            pending_data["drift"] = {
+                "timestamp": payload.get("snapshot_at") or now_iso,
+                "changes": diff,
+                "status": "pending",
+                "created_at": now_iso,
+            }
+            pending_modified = True
+        elif "drift" in pending_data:
+            pending_data.pop("drift", None)
+            pending_modified = True
+    elif "drift" in pending_data:
+        pending_data.pop("drift", None)
+        pending_modified = True
+
+    if pending_modified:
+        _atomic_write_json(pending_file, pending_data)
+
+    # Record initial baseline auto-approval if audit history is empty
+    audit_history_path = os.path.join(server_dir, "audit_history.json")
+    if (
+        not os.path.isfile(audit_history_path)
+        or os.path.getsize(audit_history_path) == 0
+    ):
+        snap = payload.get("snapshot", {})
+        gen_at = ""
+        if isinstance(snap, dict):
+            gen_at = snap.get("snapshot_at") or snap.get("generated_at") or ""
+        ts_clean = ""
+        if gen_at:
+            try:
+                dt = datetime.fromisoformat(gen_at).astimezone(IST)
+                ts_clean = dt.strftime("%Y_%m_%d_%H_%M")
+            except (ValueError, TypeError):
+                ts_clean = gen_at.replace(":", "_").replace("-", "_")
+        if not ts_clean:
+            ts_clean = datetime.now(IST).strftime("%Y_%m_%d_%H_%M")
+        snap_id = f"snapshot_{server_id}_{ts_clean}.json"
+        init_record = [
+            {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "action": "APPROVED",
+                "snapshot_id": snap_id,
+                "user": "system (initial baseline)",
+                "reason": "Auto-approved initial baseline",
+            }
+        ]
+        _atomic_write_json(audit_history_path, init_record)
 
 
 def prune_history(data_dir: str, server_id: str, retention_count: int) -> None:
@@ -480,8 +516,6 @@ def prune_history(data_dir: str, server_id: str, retention_count: int) -> None:
             pass
 
 
-
-
 def health_status(latest: Dict[str, Any], stale_threshold_minutes: int) -> str:
     """Return 'healthy', 'stale', or 'unknown' based on last_seen timestamp."""
     last_seen_str = latest.get("last_seen") or latest.get("snapshot_at")
@@ -495,15 +529,11 @@ def health_status(latest: Dict[str, Any], stale_threshold_minutes: int) -> str:
         return "unknown"
 
 
-
-
 def _atomic_write_json(path: str, data: Any) -> None:
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as fh:
         json.dump(data, fh, indent=2, sort_keys=True)
     os.replace(tmp, path)
-
-
 
 
 def _atomic_write_bytes(path: str, data: bytes) -> None:
@@ -516,12 +546,6 @@ def _atomic_write_bytes(path: str, data: bytes) -> None:
 # ---------------------------------------------------------------------------
 # Login form HTML
 # ---------------------------------------------------------------------------
-
-
-
-
-
-
 
 
 _LOGIN_HTML = """\
@@ -568,6 +592,8 @@ _LOGIN_HTML = """\
   // Normal top-level login: let the browser POST the form and receive the
   // Set-Cookie session as usual - nothing to do here.
   if (window.self === window.top) return;
+
+
 
 
   // Embedded in a (possibly cross-origin) iframe: the SameSite session
@@ -617,12 +643,6 @@ _LOGIN_HTML = """\
 # ---------------------------------------------------------------------------
 
 
-
-
-
-
-
-
 def _url_decode(s: str) -> str:
     """Decode a percent-encoded + URL-encoded string (form data)."""
     s = s.replace("+", " ")
@@ -631,7 +651,7 @@ def _url_decode(s: str) -> str:
     while i < len(s):
         if s[i] == "%" and i + 2 < len(s):
             try:
-                result.append(chr(int(s[i + 1: i + 3], 16)))
+                result.append(chr(int(s[i + 1 : i + 3], 16)))
                 i += 3
                 continue
             except ValueError:
@@ -641,45 +661,36 @@ def _url_decode(s: str) -> str:
     return "".join(result)
 
 
-
-
-
-
-
-
 # ---------------------------------------------------------------------------
 # Request handler  (Tasks 2.1 - 2.6, 3.3 - 3.7, 4.3 - 4.5)
 # ---------------------------------------------------------------------------
-
-
-
-
-
-
 
 
 class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
     """HTTP request handler for the central platform server.
 
 
+
+
     Class attributes are set by the BoundHandler subclass in run_server().
     """
-
 
     # Populated by BoundHandler at startup:
     global_cfg: Dict[str, Any] = {}
     data_dir: str = ""
     public_dir: str = ""
 
+    # Serialises the read-modify-write cycles behind every approve/reject so
+    # concurrent (or double-clicked) decisions cannot lose an audit record or
+    # resurrect an already-decided item as pending.
+    _decision_lock = threading.Lock()
 
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
 
-
     def _clean_path(self) -> str:
         return self.path.split("?", 1)[0].split("#", 1)[0]
-
 
     def _send_json(self, data: Any, status: int = 200) -> None:
         body = json.dumps(data, indent=2, sort_keys=True).encode("utf-8")
@@ -690,7 +701,6 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-
     def _send_html(self, html: str, status: int = 200) -> None:
         body = html.encode("utf-8")
         self.send_response(status)
@@ -700,20 +710,17 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-
     def _redirect(self, location: str, status: int = 302) -> None:
         self.send_response(status)
         self.send_header("Location", location)
         self.send_header("Content-Length", "0")
         self.end_headers()
 
-
     def _read_body(self) -> bytes:
         length = int(self.headers.get("Content-Length", 0))
         if length <= 0:
             return b""
         return self.rfile.read(length)
-
 
     def _parse_cookies(self) -> Dict[str, str]:
         cookies: Dict[str, str] = {}
@@ -724,9 +731,10 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
                 cookies[k.strip()] = v.strip()
         return cookies
 
-
     def _get_session_username(self) -> Optional[str]:
         """Return the authenticated username, or None.
+
+
 
 
         Checks the signed session cookie first (traditional top-level browser
@@ -738,24 +746,22 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
         """
         secret = self.global_cfg.get("secret_key", "")
 
-
         cookie_val = self._parse_cookies().get(SESSION_COOKIE_NAME, "")
         if cookie_val:
             username = verify_session_cookie(cookie_val, secret)
             if username:
                 return username
 
-
         token = self.headers.get("X-Auth-Token", "")
         if token:
             return verify_session_cookie(token, secret)
 
-
         return None
-
 
     def _require_auth(self) -> Optional[str]:
         """Return username if authenticated; otherwise respond and return None.
+
+
 
 
         JSON API routes (path starting with /api/) get a 401 JSON body so
@@ -774,15 +780,11 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
             self._redirect("/login")
         return None
 
-
     def _validate_api_key(self) -> bool:
         """Constant-time comparison of X-API-Key against configured key."""
         incoming = self.headers.get("X-API-Key", "")
         expected = self.global_cfg.get("api_key", "")
-        return hmac.compare_digest(
-            incoming.encode("utf-8"), expected.encode("utf-8")
-        )
-
+        return hmac.compare_digest(incoming.encode("utf-8"), expected.encode("utf-8"))
 
     def log_message(self, fmt: str, *args: Any) -> None:  # type: ignore[override]
         sys.stdout.write(
@@ -790,30 +792,24 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
         )
         sys.stdout.flush()
 
-
     # ------------------------------------------------------------------
     # GET dispatcher  (Task 2.1)
     # ------------------------------------------------------------------
 
-
     def do_GET(self) -> None:  # noqa: N802
         path = self._clean_path()
-
 
         if path in ("/", ""):
             self._redirect("/central.html")
             return
 
-
         if path == "/login":
             self._handle_get_login()
             return
 
-
         if path == "/logout":
             self._handle_logout()
             return
-
 
         if path == "/api/servers":
             if self._require_auth() is None:
@@ -821,13 +817,23 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
             self._handle_get_servers()
             return
 
+        if path == "/api/pending":
+            if self._require_auth() is None:
+                return
+            self._handle_get_pending_all()
+            return
+
+        if path == "/api/audit":
+            if self._require_auth() is None:
+                return
+            self._handle_get_audit_all()
+            return
 
         if path.startswith("/api/server/"):
-            rest = path[len("/api/server/"):]
+            rest = path[len("/api/server/") :]
             parts = rest.split("/", 1)
             server_id = parts[0]
             sub = parts[1] if len(parts) > 1 else ""
-
 
             # pending-config is polled by the agent using the API key, NOT by the browser.
             if sub == "pending-config":
@@ -843,7 +849,6 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
                 self._handle_get_pending_baseline(server_id)
                 return
 
-
             # All other /api/server/* routes require a browser session.
             if self._require_auth() is None:
                 return
@@ -853,128 +858,124 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
                 self._handle_get_report_status(server_id)
             elif sub == "audit-status":
                 self._handle_get_audit_status(server_id)
+            elif sub == "status":
+                self._handle_get_approval_status(server_id)
             else:
                 self._handle_get_server_detail(server_id)
             return
 
-
         if path.startswith("/server/") and path.endswith("/dashboard"):
             if self._require_auth() is None:
                 return
-            server_id = path[len("/server/"): -len("/dashboard")]
+            server_id = path[len("/server/") : -len("/dashboard")]
             self._handle_get_server_dashboard(server_id)
             return
 
-
         # Fall through to static file serving
         self._serve_static(path)
-
 
     # ------------------------------------------------------------------
     # POST dispatcher  (Task 2.1)
     # ------------------------------------------------------------------
 
-
     def do_POST(self) -> None:  # noqa: N802
         path = self._clean_path()
-
 
         if path == "/api/ingest":
             self._handle_post_ingest()
             return
 
-
         if path == "/login":
             self._handle_post_login()
             return
 
-
         if path.startswith("/api/server/") and path.endswith("/config"):
             if self._require_auth() is None:
                 return
-            server_id = path[len("/api/server/"): -len("/config")]
+            server_id = path[len("/api/server/") : -len("/config")]
             self._handle_post_server_config(server_id)
             return
-
 
         if path.startswith("/api/server/") and path.endswith("/report-approve"):
             if self._require_auth() is None:
                 return
-            server_id = path[len("/api/server/"): -len("/report-approve")]
+            server_id = path[len("/api/server/") : -len("/report-approve")]
             self._handle_report_decision(server_id, "approve")
             return
-
 
         if path.startswith("/api/server/") and path.endswith("/report-reject"):
             if self._require_auth() is None:
                 return
-            server_id = path[len("/api/server/"): -len("/report-reject")]
+            server_id = path[len("/api/server/") : -len("/report-reject")]
             self._handle_report_decision(server_id, "reject")
             return
 
+        if path.startswith("/api/server/") and path.endswith("/approve"):
+            if self._require_auth() is None:
+                return
+            server_id = path[len("/api/server/") : -len("/approve")]
+            self._handle_baseline_decision(server_id, "approve")
+            return
+
+        if path.startswith("/api/server/") and path.endswith("/reject"):
+            if self._require_auth() is None:
+                return
+            server_id = path[len("/api/server/") : -len("/reject")]
+            self._handle_baseline_decision(server_id, "reject")
+            return
 
         if path.startswith("/api/server/") and path.endswith("/snapshot-approve"):
             if self._require_auth() is None:
                 return
-            server_id = path[len("/api/server/"): -len("/snapshot-approve")]
+            server_id = path[len("/api/server/") : -len("/snapshot-approve")]
             self._handle_snapshot_decision(server_id, "APPROVED")
             return
-
 
         if path.startswith("/api/server/") and path.endswith("/snapshot-reject"):
             if self._require_auth() is None:
                 return
-            server_id = path[len("/api/server/"): -len("/snapshot-reject")]
+            server_id = path[len("/api/server/") : -len("/snapshot-reject")]
             self._handle_snapshot_decision(server_id, "REJECTED")
             return
-
 
         if path.startswith("/api/server/") and path.endswith("/snapshot-compare"):
             if self._require_auth() is None:
                 return
-            server_id = path[len("/api/server/"): -len("/snapshot-compare")]
+            server_id = path[len("/api/server/") : -len("/snapshot-compare")]
             self._handle_snapshot_compare(server_id)
             return
 
-
         self._send_json({"error": "not found"}, 404)
-
 
     def do_DELETE(self) -> None:  # noqa: N802
         path = self._clean_path()
-
 
         if path.startswith("/api/server/") and path.endswith("/pending-config"):
             # Agent-callable: accept API key auth (no browser session required).
             if not self._validate_api_key():
                 self._send_json({"error": "unauthorized"}, 401)
                 return
-            server_id = path[len("/api/server/"): -len("/pending-config")]
+            server_id = path[len("/api/server/") : -len("/pending-config")]
             self._handle_delete_pending_config(server_id)
             return
-
 
         if path.startswith("/api/server/") and path.endswith("/pending-baseline"):
             if not self._validate_api_key():
                 self._send_json({"error": "unauthorized"}, 401)
                 return
-            server_id = path[len("/api/server/"): -len("/pending-baseline")]
+            server_id = path[len("/api/server/") : -len("/pending-baseline")]
             self._handle_delete_pending_baseline(server_id)
             return
 
-
         self._send_json({"error": "not found"}, 404)
-
 
     # ------------------------------------------------------------------
     # Auth handlers  (Tasks 3.3 - 3.6)
     # ------------------------------------------------------------------
 
-
     def _handle_get_login(self) -> None:
         """GET /login — serve login form."""
         self._send_html(_LOGIN_HTML.format(error_block=""))
-
 
     def _handle_post_login(self) -> None:
         """POST /login — verify credentials, then respond with a session
@@ -987,13 +988,11 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
                 k, v = part.split("=", 1)
                 fields[_url_decode(k)] = _url_decode(v)
 
-
         username = fields.get("username", "").strip()
         password = fields.get("password", "")
         users: Dict[str, str] = self.global_cfg.get("users", {})
         stored_hash = users.get(username, "")
         wants_json = "application/json" in self.headers.get("Accept", "")
-
 
         if stored_hash and verify_password(password, stored_hash):
             secret = self.global_cfg.get("secret_key", "")
@@ -1020,7 +1019,6 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
             error_block = '<div class="err">Invalid username or password.</div>'
             self._send_html(_LOGIN_HTML.format(error_block=error_block), status=401)
 
-
     def _handle_logout(self) -> None:
         """GET /logout — clear session cookie and redirect to /login."""
         self.send_response(302)
@@ -1032,11 +1030,9 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
         self.send_header("Content-Length", "0")
         self.end_headers()
 
-
     # ------------------------------------------------------------------
     # Ingest handler  (Task 2.2)
     # ------------------------------------------------------------------
-
 
     def _handle_post_ingest(self) -> None:
         """POST /api/ingest — receive snapshot payload from an agent."""
@@ -1044,13 +1040,13 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
             self._send_json({"error": "unauthorized"}, 401)
             return
 
-
-        max_bytes = int(self.global_cfg.get("max_ingest_bytes", DEFAULT_MAX_INGEST_BYTES))
+        max_bytes = int(
+            self.global_cfg.get("max_ingest_bytes", DEFAULT_MAX_INGEST_BYTES)
+        )
         content_length = int(self.headers.get("Content-Length", 0))
         if content_length > max_bytes:
             self._send_json({"error": "payload too large"}, 413)
             return
-
 
         body = self._read_body()
         try:
@@ -1059,12 +1055,10 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
             self._send_json({"error": "invalid JSON"}, 400)
             return
 
-
         server_id = str(payload.get("server_id", "")).strip()
         if not server_id:
             self._send_json({"error": "missing server_id in payload"}, 400)
             return
-
 
         try:
             store_push(self.data_dir, server_id, payload)
@@ -1072,19 +1066,15 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
             self._send_json({"error": f"storage failure: {exc}"}, 500)
             return
 
-
         effective = get_effective_config(self.global_cfg, self.data_dir, server_id)
         retention = int(effective.get("history_retention_count", 30))
         prune_history(self.data_dir, server_id, retention)
 
-
         self._send_json({"ok": True})
-
 
     # ------------------------------------------------------------------
     # Server list / detail handlers  (Tasks 2.3, 2.4)
     # ------------------------------------------------------------------
-
 
     def _handle_get_servers(self) -> None:
         """GET /api/servers — list all known servers with health info."""
@@ -1092,7 +1082,6 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
         if not os.path.isdir(self.data_dir):
             self._send_json(servers)
             return
-
 
         for entry in sorted(os.listdir(self.data_dir)):
             server_dir = os.path.join(self.data_dir, entry)
@@ -1105,28 +1094,135 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
             except (OSError, json.JSONDecodeError):
                 continue
 
-
             effective = get_effective_config(self.global_cfg, self.data_dir, entry)
             stale_threshold = int(effective.get("stale_threshold_minutes", 60))
 
-
             # Prefer baseline stats (cumulative) for card display; fall back to incremental.
-            baseline_cs = latest.get("baseline_change_summary") or latest.get("change_summary", {})
-            baseline_hc = latest.get("baseline_has_changes", latest.get("has_changes", False))
+            baseline_cs = latest.get("baseline_change_summary") or latest.get(
+                "change_summary", {}
+            )
+            baseline_hc = latest.get(
+                "baseline_has_changes", latest.get("has_changes", False)
+            )
 
-
-            servers.append({
-                "server_id": entry,
-                "hostname": latest.get("hostname", ""),
-                "last_seen": latest.get("last_seen", latest.get("snapshot_at", "")),
-                "has_changes": bool(baseline_hc),
-                "change_summary": baseline_cs,
-                "health": health_status(latest, stale_threshold),
-            })
-
+            servers.append(
+                {
+                    "server_id": entry,
+                    "hostname": latest.get("hostname", ""),
+                    "last_seen": latest.get("last_seen", latest.get("snapshot_at", "")),
+                    "has_changes": bool(baseline_hc),
+                    "change_summary": baseline_cs,
+                    "health": health_status(latest, stale_threshold),
+                }
+            )
 
         self._send_json(servers)
 
+    def _handle_get_pending_all(self) -> None:
+        """GET /api/pending — fleet-wide unified approval queue.
+
+
+        Merges pending drift reports (ReportApprovalStore) and pending
+        category changes (ApprovalAPIHandler) into one flat list so the UI can
+        review everything without switching views.
+        """
+        items: List[Dict[str, Any]] = []
+        if not os.path.isdir(self.data_dir):
+            self._send_json({"total": 0, "items": items})
+            return
+
+        for server_id in sorted(os.listdir(self.data_dir)):
+            if not os.path.isdir(os.path.join(self.data_dir, server_id)):
+                continue
+
+            hostname = ""
+            try:
+                with open(
+                    os.path.join(self.data_dir, server_id, "latest.json"),
+                    "r",
+                    encoding="utf-8",
+                ) as fh:
+                    hostname = json.load(fh).get("hostname", "")
+            except (OSError, json.JSONDecodeError):
+                pass
+
+            store = self._get_central_report_store(server_id)
+            if store is not None:
+                try:
+                    for basename, rec in (store.get_all() or {}).items():
+                        if not isinstance(rec, dict) or rec.get("status") != "pending":
+                            continue
+                        items.append(
+                            {
+                                "type": "report",
+                                "server_id": server_id,
+                                "hostname": hostname,
+                                "id": basename,
+                                "label": rec.get("report_label", basename),
+                                "change_count": rec.get("change_count", 0),
+                                "threshold": rec.get("threshold", 0),
+                                "threshold_exceeded": bool(
+                                    rec.get("threshold_exceeded", False)
+                                ),
+                                "created_at": rec.get("created_at", ""),
+                            }
+                        )
+                except Exception:  # noqa: BLE001 - one bad store must not hide the rest
+                    pass
+
+            try:
+                from approval_api import ApprovalAPIHandler  # type: ignore
+
+                handler = ApprovalAPIHandler(
+                    server_id,
+                    os.path.join(self.data_dir, server_id, "approvals"),
+                    os.path.join(self.data_dir, server_id, "baselines"),
+                )
+                for category, rec in (
+                    handler.get_approval_status().get("categories", {}).items()
+                ):
+                    if not isinstance(rec, dict) or rec.get("status") != "pending":
+                        continue
+                    items.append(
+                        {
+                            "type": category,
+                            "server_id": server_id,
+                            "hostname": hostname,
+                            "id": category,
+                            "label": f"{category} changes",
+                            "change_count": rec.get("changes", 0),
+                            "created_at": rec.get("created_at")
+                            or rec.get("timestamp")
+                            or "",
+                        }
+                    )
+            except Exception:  # noqa: BLE001
+                pass
+
+        items.sort(key=lambda i: str(i.get("created_at") or ""), reverse=True)
+        self._send_json({"total": len(items), "items": items})
+
+    def _handle_get_audit_all(self) -> None:
+        """GET /api/audit — most recent audit records across the whole fleet."""
+        records: List[Dict[str, Any]] = []
+        if os.path.isdir(self.data_dir):
+            for server_id in sorted(os.listdir(self.data_dir)):
+                try:
+                    with open(
+                        self._audit_history_path(server_id), "r", encoding="utf-8"
+                    ) as fh:
+                        history = json.load(fh)
+                except (OSError, json.JSONDecodeError):
+                    continue
+                if not isinstance(history, list):
+                    continue
+                for rec in history:
+                    if isinstance(rec, dict):
+                        entry = dict(rec)
+                        entry["server_id"] = server_id
+                        records.append(entry)
+        records.sort(key=lambda r: str(r.get("timestamp") or ""), reverse=True)
+        self._send_json({"history": records[:100]})
 
     def _handle_get_server_detail(self, server_id: str) -> None:
         """GET /api/server/<id> — return latest.json content for one server."""
@@ -1140,23 +1236,19 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
         except (OSError, json.JSONDecodeError) as exc:
             self._send_json({"error": str(exc)}, 500)
             return
-           
+
         effective = get_effective_config(self.global_cfg, self.data_dir, server_id)
         stale_threshold = int(effective.get("stale_threshold_minutes", 60))
         data["health"] = health_status(data, stale_threshold)
-       
-        self._send_json(data)
 
+        self._send_json(data)
 
     # ------------------------------------------------------------------
     # Dashboard pass-through handler  (Task 2.5)
     # ------------------------------------------------------------------
 
-
     def _handle_get_server_dashboard(self, server_id: str) -> None:
         """GET /server/<id>/dashboard — serve latest_dashboard.html verbatim.
-
-
         The HTML is a static snapshot: visualize_report.py inlines the full
         contents of bin/public/visualize_report.js into it at generation
         time on the agent, and the agent pushes that HTML blob as-is. If an
@@ -1164,6 +1256,8 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
         JS may still call legacy non-server-scoped API paths (e.g.
         "/api/report-approve") that only exist on serve_dashboard.py, not
         here — causing 404s under central even though newer JS is correct.
+
+
 
 
         To avoid depending on every agent redeploying + re-pushing, patch
@@ -1183,9 +1277,29 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
             self._send_json({"error": str(exc)}, 500)
             return
 
+        # Replace embedded JS with the latest public/visualize_report.js if available
+        js_path = os.path.join(self.public_dir, "visualize_report.js")
+        if os.path.isfile(js_path):
+            try:
+                with open(js_path, "r", encoding="utf-8") as _js_fh:
+                    latest_js = _js_fh.read()
+                html_str = data.decode("utf-8", errors="replace")
+                needle = '</script>\n    <script>'
+                idx_thresh = html_str.rfind(needle)
+                if idx_thresh == -1:
+                    needle = '</script><script>'
+                    idx_thresh = html_str.rfind(needle)
+                if idx_thresh != -1:
+                    idx_body = html_str.rfind('</body>')
+                    if idx_body != -1:
+                        prefix = html_str[:idx_thresh] + '</script>\n    <script>\n'
+                        suffix = '\n    </script>\n  ' + html_str[idx_body:]
+                        html_str = prefix + latest_js + suffix
+                        data = html_str.encode("utf-8")
+            except Exception:
+                pass
 
         data = self._inject_central_fetch_shim(data, server_id)
-
 
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -1194,11 +1308,12 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-
     @staticmethod
     def _inject_central_fetch_shim(html_bytes: bytes, server_id: str) -> bytes:
         """Append a small script rewriting legacy agent-local API paths to
         this central server's per-server scoped equivalents.
+
+
 
 
         Only exact-match legacy paths are rewritten, so already-fixed JS
@@ -1209,7 +1324,6 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
             html_text = html_bytes.decode("utf-8")
         except UnicodeDecodeError:
             return html_bytes
-
 
         sid_json = json.dumps(server_id)
         shim = f"""
@@ -1222,7 +1336,10 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
     "/api/report-reject": "/api/server/" + _centralServerId + "/report-reject",
     "/api/audit-status": "/api/server/" + _centralServerId + "/audit-status",
     "/api/snapshot-approve": "/api/server/" + _centralServerId + "/snapshot-approve",
-    "/api/snapshot-reject": "/api/server/" + _centralServerId + "/snapshot-reject"
+    "/api/snapshot-reject": "/api/server/" + _centralServerId + "/snapshot-reject",
+    "/api/status": "/api/server/" + _centralServerId + "/status",
+    "/api/approve": "/api/server/" + _centralServerId + "/approve",
+    "/api/reject": "/api/server/" + _centralServerId + "/reject"
   }};
   var _origFetch = window.fetch;
   window.fetch = function(input, init) {{
@@ -1248,16 +1365,14 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
             html_text += shim
         return html_text.encode("utf-8")
 
-
-
-
     # ------------------------------------------------------------------
     # Per-server config API  (Tasks 4.4, 4.5)
     # ------------------------------------------------------------------
 
-
     def _handle_get_server_config(self, server_id: str) -> None:
         """GET /api/server/<id>/config.
+
+
 
 
         Priority:
@@ -1268,7 +1383,6 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
         server_dir = os.path.join(self.data_dir, server_id)
         agent_config_path = os.path.join(server_dir, "agent_config.json")
 
-
         if os.path.isfile(agent_config_path):
             try:
                 with open(agent_config_path, "r", encoding="utf-8") as fh:
@@ -1277,10 +1391,10 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
                 self._send_json({"error": f"Could not read agent config: {exc}"}, 500)
                 return
 
-
             # Strip sensitive and comment-only keys.
             safe = {
-                k: v for k, v in agent_cfg.items()
+                k: v
+                for k, v in agent_cfg.items()
                 if k not in AGENT_CONFIG_SENSITIVE_KEYS
                 and not k.startswith(AGENT_CONFIG_COMMENT_PREFIX)
             }
@@ -1289,20 +1403,21 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
             self._send_json(safe)
             return
 
-
         # No agent config pushed yet — return platform overrides only.
         effective = get_effective_config(self.global_cfg, self.data_dir, server_id)
         safe = {
-            k: v for k, v in effective.items()
+            k: v
+            for k, v in effective.items()
             if k not in ("api_key", "secret_key", "users")
             and not k.startswith(AGENT_CONFIG_COMMENT_PREFIX)
         }
         safe["_source"] = "platform"
         self._send_json(safe)
 
-
     def _handle_post_server_config(self, server_id: str) -> None:
         """POST /api/server/<id>/config — validate and queue full agent config as pending_config.json.
+
+
 
 
         The agent will pick up pending_config.json on its next run, apply it to
@@ -1315,25 +1430,31 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
             self._send_json({"error": "invalid JSON"}, 400)
             return
 
-
         # Server-side validation (replaces client-side checks).
         errors = validate_agent_config(incoming)
         if errors:
             self._send_json({"error": "Validation failed", "details": errors}, 400)
             return
 
-
         server_dir = os.path.join(self.data_dir, server_id)
         if not os.path.isdir(server_dir):
-            self._send_json({"error": "server not found — agent must push at least one snapshot first"}, 404)
+            self._send_json(
+                {
+                    "error": "server not found — agent must push at least one snapshot first"
+                },
+                404,
+            )
             return
-
 
         pending_path = os.path.join(server_dir, "pending_config.json")
         incoming["_queued_at"] = datetime.now(timezone.utc).isoformat()
         _atomic_write_json(pending_path, incoming)
-        self._send_json({"ok": True, "message": "Config queued — will be applied on the agent's next run"})
-
+        self._send_json(
+            {
+                "ok": True,
+                "message": "Config queued — will be applied on the agent's next run",
+            }
+        )
 
     def _handle_get_pending_config(self, server_id: str) -> None:
         """GET /api/server/<id>/pending-config — return pending_config.json if present (agent polling)."""
@@ -1349,7 +1470,6 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
             return
         self._send_json({"pending": True, "config": data})
 
-
     def _handle_delete_pending_config(self, server_id: str) -> None:
         """DELETE /api/server/<id>/pending-config — agent acknowledges it has applied the config."""
         pending_path = os.path.join(self.data_dir, server_id, "pending_config.json")
@@ -1361,16 +1481,18 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
         except OSError as exc:
             self._send_json({"error": f"Could not delete pending config: {exc}"}, 500)
             return
-        self._send_json({"ok": True, "message": "Pending config acknowledged and removed"})
-
+        self._send_json(
+            {"ok": True, "message": "Pending config acknowledged and removed"}
+        )
 
     # ------------------------------------------------------------------
     # Per-report approval API  (central-side mirror of serve_dashboard.py)
     # ------------------------------------------------------------------
 
-
     def _get_central_report_store(self, server_id: str):
         """Construct a ReportApprovalStore scoped to central_data/<id>/approvals.
+
+
 
 
         This is intentionally independent of any approvals store the agent
@@ -1386,21 +1508,26 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
         os.makedirs(approvals_dir, exist_ok=True)
         return ReportApprovalStore(server_id, approvals_dir)
 
-
     def _handle_get_report_status(self, server_id: str) -> None:
         """GET /api/server/<id>/report-status — per-report approval status."""
         store = self._get_central_report_store(server_id)
         if store is None:
-            self._send_json({"error": "report_approval_store.py not found next to serve_central.py"}, 501)
+            self._send_json(
+                {
+                    "error": "report_approval_store.py not found next to serve_central.py"
+                },
+                501,
+            )
             return
         try:
             self._send_json(store.get_status_summary())
         except Exception as exc:  # noqa: BLE001
             self._send_json({"error": f"Error retrieving report status: {exc}"}, 500)
 
-
     def _handle_report_decision(self, server_id: str, action: str) -> None:
         """POST /api/server/<id>/report-approve or /report-reject.
+
+
 
 
         The browser sends the report basename plus the metadata it already
@@ -1411,9 +1538,13 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
         """
         store = self._get_central_report_store(server_id)
         if store is None:
-            self._send_json({"error": "report_approval_store.py not found next to serve_central.py"}, 501)
+            self._send_json(
+                {
+                    "error": "report_approval_store.py not found next to serve_central.py"
+                },
+                501,
+            )
             return
-
 
         try:
             body = self._read_body()
@@ -1422,58 +1553,161 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
             self._send_json({"error": "invalid JSON"}, 400)
             return
 
-
         report_basename = str(data.get("report", "")).strip()
         if not report_basename:
-            self._send_json({"error": "'report' field (report basename) is required"}, 400)
+            self._send_json(
+                {"error": "'report' field (report basename) is required"}, 400
+            )
             return
         description = str(data.get("description", "")).strip()
-
-
-        # Bootstrap/refresh the pending entry with whatever metadata the
-        # browser already has, so approve()/reject() below always has a
-        # record to act on (no-op if a decision was already made).
-        store.set_pending(
-            report_basename,
-            str(data.get("report_label", report_basename)),
-            int(data.get("change_count", 0) or 0),
-            int(data.get("threshold", 0) or 0),
-        )
-
+        user = str(data.get("user", "")).strip()
 
         try:
-            if action == "approve":
-                ok = store.approve(report_basename, description)
-                if ok:
-                    report_data = data.get("report_data")
-                    if isinstance(report_data, dict):
-                        try:
-                            from baseline_manager import BaselineManager  # type: ignore
-                            baselines_dir = os.path.join(self.data_dir, server_id, "baselines")
-                            os.makedirs(baselines_dir, exist_ok=True)
-                            BaselineManager(server_id, baselines_dir).save_golden_snapshot(
-                                report_data, str(data.get("report_label", report_basename))
+            with self._decision_lock:
+                # Bootstrap/refresh the pending entry with whatever metadata the
+                # browser already has, so approve()/reject() below always has a
+                # record to act on (no-op if a decision was already made).
+                store.set_pending(
+                    report_basename,
+                    str(data.get("report_label", report_basename)),
+                    int(data.get("change_count", 0) or 0),
+                    int(data.get("threshold", 0) or 0),
+                )
+
+                # Older reports never decided before this one arrived are stale.
+                auto_rejected = store.auto_reject_superseded(report_basename)
+                for stale in auto_rejected:
+                    self._append_audit(
+                        server_id,
+                        "REJECTED",
+                        "report",
+                        stale,
+                        "system",
+                        "Auto-rejected — superseded by a newer report",
+                    )
+
+                if action == "approve":
+                    ok = store.approve(report_basename, description)
+                    if ok:
+                        report_data = data.get("report_data")
+                        if isinstance(report_data, dict):
+                            try:
+                                from baseline_manager import BaselineManager  # type: ignore
+
+                                baselines_dir = os.path.join(
+                                    self.data_dir, server_id, "baselines"
+                                )
+                                os.makedirs(baselines_dir, exist_ok=True)
+                                BaselineManager(
+                                    server_id, baselines_dir
+                                ).save_golden_snapshot(
+                                    report_data,
+                                    str(data.get("report_label", report_basename)),
+                                )
+                            except Exception:  # noqa: BLE001 - golden update is best-effort
+                                pass
+                        # Push the approved state to the agent, otherwise its next
+                        # run diffs against the stale baseline and re-prompts.
+                        snap_id = ""
+                        if isinstance(report_data, dict):
+                            snap_id = os.path.basename(
+                                str(report_data.get("current_snapshot", ""))
                             )
-                        except Exception:  # noqa: BLE001 - golden update is best-effort
-                            pass
-                message = f"Report '{report_basename}' approved." if ok else f"Report '{report_basename}' not found."
-            else:
-                ok = store.reject(report_basename, description)
-                message = f"Report '{report_basename}' rejected." if ok else f"Report '{report_basename}' not found."
+                        self._queue_pending_baseline(
+                            server_id, snap_id or report_basename, user, description
+                        )
+                    message = (
+                        f"Report '{report_basename}' approved."
+                        if ok
+                        else f"Report '{report_basename}' not found."
+                    )
+                else:
+                    ok = store.reject(report_basename, description)
+                    message = (
+                        f"Report '{report_basename}' rejected."
+                        if ok
+                        else f"Report '{report_basename}' not found."
+                    )
 
+                audit_entry = None
+                if ok:
+                    audit_entry = self._append_audit(
+                        server_id,
+                        "APPROVED" if action == "approve" else "REJECTED",
+                        "report",
+                        report_basename,
+                        user,
+                        description,
+                    )
 
-            self._send_json({
-                "success": ok,
-                "message": message,
-                "status": store.get_status_summary(),
-            })
+                summary = store.get_status_summary()
+
+            self._send_json(
+                {
+                    "success": ok,
+                    "message": message,
+                    "status": summary,
+                    "pending_count": self._count_pending_reports(summary),
+                    "audit_entry": audit_entry,
+                    "auto_rejected": auto_rejected,
+                }
+            )
         except Exception as exc:  # noqa: BLE001
-            self._send_json({"error": f"Error processing {action} for '{report_basename}': {exc}"}, 500)
+            self._send_json(
+                {"error": f"Error processing {action} for '{report_basename}': {exc}"},
+                500,
+            )
 
+    @staticmethod
+    def _count_pending_reports(summary: Dict[str, Any]) -> int:
+        reports = summary.get("reports") if isinstance(summary, dict) else None
+        if not isinstance(reports, dict):
+            return 0
+        return sum(
+            1
+            for rec in reports.values()
+            if isinstance(rec, dict) and rec.get("status") == "pending"
+        )
 
     def _audit_history_path(self, server_id: str) -> str:
         return os.path.join(self.data_dir, server_id, "audit_history.json")
 
+    def _append_audit(
+        self,
+        server_id: str,
+        action: str,
+        target_type: str,
+        target_id: str,
+        user: str,
+        reason: str,
+    ) -> Dict[str, str]:
+        """Canonical audit writer — every approve/reject path must call this.
+
+
+        Record shape matches audit_store.AuditStore.append() so existing
+        consumers of audit_history.json keep parsing unchanged; 'target_type'
+        is purely additive.
+        """
+        record = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "action": action,
+            "target_type": target_type,
+            "snapshot_id": target_id,
+            "user": (user or "dashboard_user").strip() or "dashboard_user",
+            "reason": reason or "",
+        }
+        history_path = self._audit_history_path(server_id)
+        os.makedirs(os.path.dirname(history_path), exist_ok=True)
+        try:
+            with open(history_path, "r", encoding="utf-8") as fh:
+                history = json.load(fh)
+            if not isinstance(history, list):
+                history = []
+        except (OSError, json.JSONDecodeError):
+            history = []
+        history.append(record)
+        _atomic_write_json(history_path, history)
+        return record
 
     def _handle_get_audit_status(self, server_id: str) -> None:
         try:
@@ -1485,6 +1719,92 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
             history = []
         self._send_json({"history": history})
 
+    def _handle_get_approval_status(self, server_id: str) -> None:
+        try:
+            from approval_api import ApprovalAPIHandler  # type: ignore
+
+            approvals_dir = os.path.join(self.data_dir, server_id, "approvals")
+            baselines_dir = os.path.join(self.data_dir, server_id, "baselines")
+            handler = ApprovalAPIHandler(server_id, approvals_dir, baselines_dir)
+            self._send_json(handler.get_approval_status())
+        except Exception as exc:  # noqa: BLE001
+            self._send_json({"error": str(exc)}, 500)
+
+    def _handle_baseline_decision(self, server_id: str, action: str) -> None:
+        try:
+            body = self._read_body()
+            data = json.loads(body) if body else {}
+            category = data.get("category")
+            if category not in ("drift", "app", "network"):
+                self._send_json(
+                    {"error": "'category' must be drift, app, or network"}, 400
+                )
+                return
+            from approval_api import ApprovalAPIHandler  # type: ignore
+
+            approvals_dir = os.path.join(self.data_dir, server_id, "approvals")
+            baselines_dir = os.path.join(self.data_dir, server_id, "baselines")
+            handler = ApprovalAPIHandler(server_id, approvals_dir, baselines_dir)
+            user = str(data.get("user") or "dashboard_user")
+            snapshot_data = data.get("snapshot_data", {})
+            if category == "drift" and (not snapshot_data or not isinstance(snapshot_data, dict) or "entries" not in snapshot_data):
+                try:
+                    with open(os.path.join(self.data_dir, server_id, "latest.json"), "r", encoding="utf-8") as fh:
+                        latest = json.load(fh)
+                    snapshot_data = (latest.get("snapshot") or {}).get("entries", {})
+                except Exception:
+                    pass
+            with self._decision_lock:
+                if action == "approve":
+                    reason = str(data.get("reason") or "user_approved")
+                    success, msg = handler.approve_changes(
+                        category,
+                        snapshot_data,
+                        user=user,
+                        reason=reason,
+                    )
+                    if success:
+                        self._queue_pending_baseline(
+                            server_id,
+                            f"baseline_{server_id}_{category}",
+                            user,
+                            reason,
+                            category=category,
+                            data=snapshot_data,
+                        )
+                else:
+                    reason = str(data.get("reason") or "user_rejected")
+                    success, msg = handler.reject_changes(
+                        category,
+                        user=user,
+                        reason=reason,
+                    )
+                audit_entry = None
+                if success:
+                    audit_entry = self._append_audit(
+                        server_id,
+                        "APPROVED" if action == "approve" else "REJECTED",
+                        category,
+                        category,
+                        user,
+                        reason,
+                    )
+                status = handler.get_approval_status()
+            self._send_json(
+                {
+                    "success": success,
+                    "message": msg,
+                    "status": status,
+                    "pending_count": sum(
+                        1
+                        for rec in status.get("categories", {}).values()
+                        if isinstance(rec, dict) and rec.get("status") == "pending"
+                    ),
+                    "audit_entry": audit_entry,
+                }
+            )
+        except Exception as exc:  # noqa: BLE001
+            self._send_json({"error": str(exc)}, 500)
 
     def _handle_snapshot_decision(self, server_id: str, action: str) -> None:
         try:
@@ -1493,63 +1813,88 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
             snapshot_id = str(data.get("snapshot", "")).strip()
             user = str(data.get("user", "")).strip()
             reason = str(data.get("reason", "")).strip()
-            if not snapshot_id or not user or not reason or os.path.basename(snapshot_id) != snapshot_id:
+            if (
+                not snapshot_id
+                or not user
+                or not reason
+                or os.path.basename(snapshot_id) != snapshot_id
+            ):
                 raise ValueError("Snapshot, approver name, and reason are required")
 
-
-            with open(os.path.join(self.data_dir, server_id, "latest.json"), "r", encoding="utf-8") as fh:
+            with open(
+                os.path.join(self.data_dir, server_id, "latest.json"),
+                "r",
+                encoding="utf-8",
+            ) as fh:
                 latest = json.load(fh)
             snapshot = latest.get("snapshot")
             if action == "APPROVED" and not isinstance(snapshot, dict):
                 raise ValueError("Central has no snapshot data for this server yet")
-
-
-            record = {
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "action": action,
-                "snapshot_id": snapshot_id,
-                "user": user,
-                "reason": reason,
-            }
-            history_path = self._audit_history_path(server_id)
-            try:
-                with open(history_path, "r", encoding="utf-8") as fh:
-                    history = json.load(fh)
-                if not isinstance(history, list):
-                    history = []
-            except (OSError, json.JSONDecodeError):
-                history = []
-            history.append(record)
-            _atomic_write_json(history_path, history)
-		    
-        self._send_json({"success": True, "history": history})
+            with self._decision_lock:
+                record = self._append_audit(
+                    server_id, action, "snapshot", snapshot_id, user, reason
+                )
+                if action == "APPROVED":
+                    self._queue_pending_baseline(server_id, snapshot_id, user, reason)
+                try:
+                    with open(
+                        self._audit_history_path(server_id), "r", encoding="utf-8"
+                    ) as fh:
+                        history = json.load(fh)
+                    if not isinstance(history, list):
+                        history = [record]
+                except (OSError, json.JSONDecodeError):
+                    history = [record]
+            self._send_json(
+                {"success": True, "history": history, "audit_entry": record}
+            )
         except (OSError, ValueError, json.JSONDecodeError) as exc:
-                self._send_json({"error": str(exc)}, 400)
+            self._send_json({"error": str(exc)}, 400)
 
-
-
-    def _snapshot_from_archive(self, server_id: str, snapshot_id: str) -> Dict[str, Any]:
+    def _snapshot_from_archive(
+        self, server_id: str, snapshot_id: str
+    ) -> Dict[str, Any]:
         if os.path.basename(snapshot_id) != snapshot_id:
             raise ValueError("Invalid snapshot selection")
-        for directory in (os.path.join(self.data_dir, server_id, "history"), os.path.join(self.data_dir, server_id)):
+        for directory in (
+            os.path.join(self.data_dir, server_id, "history"),
+            os.path.join(self.data_dir, server_id),
+        ):
             if not os.path.isdir(directory):
                 continue
             for name in sorted(os.listdir(directory), reverse=True):
                 if not name.endswith(".json"):
                     continue
                 try:
-                    with open(os.path.join(directory, name), "r", encoding="utf-8") as fh:
+                    with open(
+                        os.path.join(directory, name), "r", encoding="utf-8"
+                    ) as fh:
                         payload = json.load(fh)
                     snapshot = payload.get("snapshot")
                     if not isinstance(snapshot, dict):
                         continue
-                    timestamp = datetime.fromisoformat(snapshot.get("generated_at", "")).strftime("%Y_%m_%d_%H_%M_%S")
-                    if snapshot_id.endswith(f"_{timestamp}.json"):
-                        return snapshot
+                    gen_at_str = snapshot.get("generated_at", "") or snapshot.get(
+                        "snapshot_at", ""
+                    )
+                    if gen_at_str:
+                        try:
+                            dt_snap = datetime.fromisoformat(gen_at_str)
+                            ts_ist_min = dt_snap.astimezone(IST).strftime(
+                                "%Y_%m_%d_%H_%M"
+                            )
+                            ts_utc_sec = dt_snap.strftime("%Y_%m_%d_%H_%M_%S")
+                            ts_utc_min = dt_snap.strftime("%Y_%m_%d_%H_%M")
+                            if any(
+                                snapshot_id.endswith(f"_{t}.json")
+                                or f"_{t}" in snapshot_id
+                                for t in (ts_ist_min, ts_utc_sec, ts_utc_min)
+                            ):
+                                return snapshot
+                        except (ValueError, TypeError):
+                            pass
                 except (OSError, ValueError, TypeError, json.JSONDecodeError):
                     continue
         raise ValueError(f"Snapshot archive not found: {snapshot_id}")
-
 
     def _handle_snapshot_compare(self, server_id: str) -> None:
         try:
@@ -1559,27 +1904,155 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
             if not base_id or not target_id or base_id == target_id:
                 raise ValueError("Select two different reports")
             from server_snapshot import build_report, compare_snapshots  # type: ignore
+
             base = self._snapshot_from_archive(server_id, base_id)
             target = self._snapshot_from_archive(server_id, target_id)
-            report = build_report(target, base_id, target_id, compare_snapshots(base, target))
+            report = build_report(
+                target, base_id, target_id, compare_snapshots(base, target)
+            )
             self._send_json({"report": report})
         except (OSError, ValueError, json.JSONDecodeError) as exc:
             self._send_json({"error": str(exc)}, 400)
 
+    def _queue_pending_baseline(
+        self,
+        server_id: str,
+        snapshot_id: str,
+        user: str,
+        reason: str,
+        category: str = "drift",
+        data: Optional[Dict[str, Any]] = None,
+    ) -> bool:
+        """Queue an approved baseline/snapshot for the agent to adopt as its baseline.
+
+
+        The agent polls /pending-baseline each run and updates its local
+        baselines from it. Without this the agent keeps diffing against the old
+        baseline and re-raises the same drift.
+        """
+        path = os.path.join(self.data_dir, server_id, "pending_baseline.json")
+        existing_decisions: List[Dict[str, Any]] = []
+        if os.path.isfile(path):
+            try:
+                with open(path, "r", encoding="utf-8") as fh:
+                    content = json.load(fh)
+                    if isinstance(content, list):
+                        existing_decisions = content
+                    elif isinstance(content, dict):
+                        if "decisions" in content and isinstance(
+                            content["decisions"], list
+                        ):
+                            existing_decisions = content["decisions"]
+                        elif "decision" in content and isinstance(
+                            content["decision"], dict
+                        ):
+                            existing_decisions = [content["decision"]]
+                        elif "action" in content:
+                            existing_decisions = [content]
+            except Exception:
+                existing_decisions = []
+
+        if not data:
+            try:
+                with open(
+                    os.path.join(self.data_dir, server_id, "latest.json"),
+                    "r",
+                    encoding="utf-8",
+                ) as fh:
+                    latest = json.load(fh)
+                if category == "app":
+                    data = latest.get("app_diff") or {}
+                elif category == "network":
+                    try:
+                        with open(
+                            os.path.join(
+                                self.data_dir,
+                                server_id,
+                                "baselines",
+                                f"baseline_{server_id}_network.json",
+                            ),
+                            "r",
+                            encoding="utf-8",
+                        ) as _bf:
+                            data = json.load(_bf).get("data", {})
+                    except Exception:
+                        data = latest.get("network_diff") or {}
+                else:
+                    data = latest.get("snapshot")
+            except Exception:
+                data = None
+
+        new_decision: Dict[str, Any] = {
+            "action": "APPROVED",
+            "category": category,
+            "snapshot_id": snapshot_id,
+            "user": user or "dashboard_user",
+            "reason": reason or "",
+            "decided_at": datetime.now(timezone.utc).isoformat(),
+        }
+        if category in ("drift", "snapshot") or (
+            isinstance(data, dict) and "entries" in data
+        ):
+            new_decision["snapshot"] = data
+        if data is not None:
+            new_decision["data"] = data
+
+        existing_decisions = [
+            d for d in existing_decisions if d.get("category") != category
+        ]
+        existing_decisions.append(new_decision)
+
+        try:
+            _atomic_write_json(
+                path,
+                {
+                    "pending": True,
+                    "decision": new_decision,
+                    "decisions": existing_decisions,
+                },
+            )
+            return True
+        except OSError:
+            return False
 
     def _handle_get_pending_baseline(self, server_id: str) -> None:
         path = os.path.join(self.data_dir, server_id, "pending_baseline.json")
         try:
             with open(path, "r", encoding="utf-8") as fh:
-                decision = json.load(fh)
+                content = json.load(fh)
         except FileNotFoundError:
             self._send_json({"pending": False})
             return
         except (OSError, json.JSONDecodeError) as exc:
             self._send_json({"error": str(exc)}, 500)
             return
-        self._send_json({"pending": True, "decision": decision})
 
+        if isinstance(content, list):
+            self._send_json(
+                {
+                    "pending": len(content) > 0,
+                    "decision": content[-1] if content else {},
+                    "decisions": content,
+                }
+            )
+        elif isinstance(content, dict) and "decisions" in content:
+            self._send_json(content)
+        elif isinstance(content, dict) and "decision" in content:
+            self._send_json(
+                {
+                    "pending": True,
+                    "decision": content["decision"],
+                    "decisions": [content["decision"]],
+                }
+            )
+        else:
+            self._send_json(
+                {
+                    "pending": True,
+                    "decision": content,
+                    "decisions": [content] if content else [],
+                }
+            )
 
     def _handle_delete_pending_baseline(self, server_id: str) -> None:
         try:
@@ -1591,11 +2064,9 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
             return
         self._send_json({"ok": True})
 
-
     # ------------------------------------------------------------------
     # Static file serving  (Task 2.6)
     # ------------------------------------------------------------------
-
 
     def _serve_static(self, path: str) -> None:
         """Serve .html/.css/.js files from public_dir (whitelist only)."""
@@ -1604,19 +2075,16 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
             self._redirect("/central.html")
             return
 
-
         allowed_exts = (".html", ".css", ".js")
         _, ext = os.path.splitext(filename)
         if ext not in allowed_exts or "/" in filename or ".." in filename:
             self._send_json({"error": "not found"}, 404)
             return
 
-
         file_path = os.path.join(self.public_dir, filename)
         if not os.path.isfile(file_path):
             self._send_json({"error": "not found"}, 404)
             return
-
 
         content_types = {
             ".html": "text/html; charset=utf-8",
@@ -1630,7 +2098,6 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
             self._send_json({"error": str(exc)}, 500)
             return
 
-
         self.send_response(200)
         self.send_header("Content-Type", content_types[ext])
         self.send_header("Content-Length", str(len(data)))
@@ -1638,21 +2105,9 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(data)
 
 
-
-
-
-
-
-
 # ---------------------------------------------------------------------------
 # Server startup  (Tasks 2.1, 2.7)
 # ---------------------------------------------------------------------------
-
-
-
-
-
-
 
 
 def run_server(
@@ -1665,26 +2120,21 @@ def run_server(
 ) -> int:
     """Start the ThreadingHTTPServer and block until shutdown."""
 
-
     class BoundHandler(CentralRequestHandler):
         pass
-
 
     BoundHandler.global_cfg = global_cfg
     BoundHandler.data_dir = data_dir
     BoundHandler.public_dir = public_dir
-
 
     try:
         httpd = http.server.ThreadingHTTPServer((host, port), BoundHandler)
     except OSError as exc:
         raise CentralError(f"Failed to bind {host}:{port}: {exc}") from exc
 
-
     def _shutdown(signum: int, _frame: Any) -> None:
         print(f"Received signal {signum}, shutting down...", flush=True)
         threading.Thread(target=httpd.shutdown, daemon=True).start()
-
 
     signal.signal(signal.SIGTERM, _shutdown)
     try:
@@ -1692,9 +2142,7 @@ def run_server(
     except OSError:
         pass  # Windows: SIGINT handled via KeyboardInterrupt
 
-
     os.makedirs(data_dir, exist_ok=True)
-
 
     display_host = host if host != "0.0.0.0" else "<this-server-ip>"
     print(f"serve_central {SCRIPT_VERSION}", flush=True)
@@ -1709,15 +2157,12 @@ def run_server(
             flush=True,
         )
 
-
     try:
         httpd.serve_forever(poll_interval=0.5)
     finally:
         httpd.server_close()
         print("Server stopped.", flush=True)
     return 0
-
-
 
 
 def main(argv: Optional[List[str]] = None) -> int:  # Task 2.7
@@ -1762,13 +2207,11 @@ def main(argv: Optional[List[str]] = None) -> int:  # Task 2.7
     )
     args = parser.parse_args(argv)
 
-
     # Task 6.2: --hash-password helper (implemented here so users don't
     # need a full config just to hash a password).
     if args.hash_password:
         print(hash_password(args.hash_password))
         return 0
-
 
     try:
         global_cfg = load_platform_config(args.config)
@@ -1776,23 +2219,20 @@ def main(argv: Optional[List[str]] = None) -> int:  # Task 2.7
         print(f"Error: {exc}", file=sys.stderr)
         return 2
 
-
     # Task 3.7: warn on insecure file permissions
     _warn_if_insecure_permissions(args.config)
-
 
     host = args.host or global_cfg.get("host") or "127.0.0.1"
     port = args.port or global_cfg.get("port") or 8090
 
-
-    data_dir = args.data_dir or global_cfg.get("data_dir") or os.path.join(
-        os.path.dirname(os.path.abspath(args.config)), "central_data"
+    data_dir = (
+        args.data_dir
+        or global_cfg.get("data_dir")
+        or os.path.join(os.path.dirname(os.path.abspath(args.config)), "central_data")
     )
-
 
     # public_dir: central.html/css/js live alongside this script in bin/public/
     public_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "public")
-
 
     try:
         return run_server(
@@ -1810,14 +2250,5 @@ def main(argv: Optional[List[str]] = None) -> int:  # Task 2.7
         return 0
 
 
-
-
-
-
-
-
 if __name__ == "__main__":
     sys.exit(main())
-
-
-

@@ -1,0 +1,46 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Caches and tooling
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+
+# Environments and virtual environments
+.env
+.env.*
+.venv/
+venv/
+env/
+ENV/
+
+# IDE and OS metadata
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ServerSnap runtime artifacts & generated data
+Output/
+approvals/
+baseline/
+baselines/
+central_data/
+reports/
+snapshots/
+logs/
+*.log
+audit.log
+history.json
+
+# Temporary files
+*.tmp
+*.bak

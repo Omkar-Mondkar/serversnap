@@ -1,6 +1,5 @@
 """Persistent approved baseline and append-only audit decision storage."""
 
-
 from __future__ import annotations
 
 
@@ -13,8 +12,6 @@ from typing import Any, Dict, List, Optional
 
 
 from server_snapshot import load_snapshot_file
-
-
 
 
 class AuditStore:
@@ -30,10 +27,12 @@ class AuditStore:
         except OSError:
             pass
 
-
     def load_baseline(self) -> Optional[Dict[str, Any]]:
-        return load_snapshot_file(str(self.baseline_path)) if self.baseline_path.is_file() else None
-
+        return (
+            load_snapshot_file(str(self.baseline_path))
+            if self.baseline_path.is_file()
+            else None
+        )
 
     def promote(self, snapshot_path: str) -> None:
         temporary = self.baseline_path.with_suffix(".tmp")
@@ -43,7 +42,6 @@ class AuditStore:
         except OSError:
             pass
         os.replace(temporary, self.baseline_path)
-
 
     def append(self, action: str, snapshot_path: str, user: str, reason: str) -> None:
         record = {
@@ -66,7 +64,6 @@ class AuditStore:
         with self.audit_path.open("a", encoding="utf-8") as audit_file:
             audit_file.write(json.dumps(record, sort_keys=True) + "\n")
 
-
     def history(self) -> List[Dict[str, str]]:
         if not self.history_path.is_file():
             return []
@@ -74,4 +71,3 @@ class AuditStore:
             return json.loads(self.history_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return []
-

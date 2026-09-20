@@ -4,6 +4,7 @@
  * No frameworks; stdlib fetch + vanilla DOM.
  */
 
+
 "use strict";
 
 // ────────────────────────────────────────────────────────────────
@@ -11,29 +12,35 @@
 // ────────────────────────────────────────────────────────────────
 const REFRESH_INTERVAL_SECS = 60;
 
+
 // Session token key (sessionStorage) used as a cookie fallback when this
 // page is embedded in a cross-origin <iframe> - see /login's inline script.
 const AUTH_TOKEN_KEY = "sscentral_auth_token";
+
 
 function authHeaders() {
   const token = sessionStorage.getItem(AUTH_TOKEN_KEY);
   return token ? { "X-Auth-Token": token } : {};
 }
 
+
 function handleAuthFailure() {
   sessionStorage.removeItem(AUTH_TOKEN_KEY);
   window.location.href = "/login";
 }
+
 
 // ────────────────────────────────────────────────────────────────
 // DOM refs
 // ────────────────────────────────────────────────────────────────
 const $ = (id) => document.getElementById(id);
 
+
 const views = {
   home: $("view-home"),
   detail: $("view-detail"),
 };
+
 
 const els = {
   cardGrid: $("card-grid"),
@@ -61,6 +68,7 @@ const els = {
   approvalHistory: $("approval-history-list"),
 };
 
+
 // ────────────────────────────────────────────────────────────────
 // State
 // ────────────────────────────────────────────────────────────────
@@ -71,9 +79,11 @@ let _countdown = REFRESH_INTERVAL_SECS;
 let _currentView = "home";
 let _toastTimer = null;
 
+
 // ────────────────────────────────────────────────────────────────
 // Utilities
 // ────────────────────────────────────────────────────────────────
+
 
 function timeAgo(isoString) {
   if (!isoString) return "—";
@@ -90,9 +100,131 @@ function timeAgo(isoString) {
   return `${days}d ago`;
 }
 
+
+function formatDate(iso) {
+  if (!iso) return "—";
+  try {
+    let s = String(iso).trim();
+    if (/^\d{4}_\d{2}_\d{2}/.test(s)) {
+      s = s
+        .replace(/^(\d{4})_(\d{2})_(\d{2})/, "$1-$2-$3")
+        .replace(/T(\d{2})_(\d{2})_(\d{2})/, "T$1:$2:$3")
+        .replace(/([+-]\d{2})_(\d{2})$/, "$1:$2");
+    }
+    const d = new Date(s.replace(" ", "T"));
+    if (isNaN(d.getTime())) return iso;
+    return (
+      d.toLocaleString("en-IN", {
+        timeZone: "Asia/Kolkata",
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }) + " IST"
+    );
+  } catch (e) {
+    return iso || "—";
+  }
+}
+
+
+function formatEntityName(name) {
+  if (!name) return "";
+  const filename = name.split("/").pop().split("\\").pop();
+  const dotIdx = filename.lastIndexOf(".");
+  const stem = dotIdx !== -1 ? filename.slice(0, dotIdx) : filename;
+  const ext = dotIdx !== -1 ? filename.slice(dotIdx) : "";
+  const preMatch = stem.match(
+    /^(report|snapshot|latest_report|latest_snapshot)_(.+)$/i,
+  );
+  if (!preMatch) return filename;
+  const prefix = preMatch[1];
+  const remainder = preMatch[2];
+
+
+  // 1. Check for ISO-like timestamp: e.g. web01_2026_09_05T18_27_35.165669+00_00
+  const isoMatch = remainder.match(
+    /^(.*?)_?(\d{4}[-_]\d{2}[-_]\d{2}T\d{2}[_:]\d{2}[_:]\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}[_:]?\d{2})?)$/i,
+  );
+  if (isoMatch) {
+    const sid = isoMatch[1] || "";
+    const rawIso = isoMatch[2];
+    const normIso = rawIso
+      .replace(/^(\d{4})_(\d{2})_(\d{2})/, "$1-$2-$3")
+      .replace(/T(\d{2})_(\d{2})_(\d{2})/, "T$1:$2:$3")
+      .replace(/([+-]\d{2})_(\d{2})$/, "$1:$2");
+    const d = new Date(normIso);
+    if (!isNaN(d.getTime())) {
+      const parts = new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Asia/Kolkata",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }).formatToParts(d);
+      const p = {};
+      parts.forEach((x) => {
+        p[x.type] = x.value;
+      });
+      const tsStr = `${p.year}_${p.month}_${p.day}_${p.hour}_${p.minute}`;
+      return (sid ? `${prefix}_${sid}` : prefix) + `_${tsStr}${ext}`;
+    }
+  }
+
+
+  // 2. Check for underscore-separated format: web01_2026_09_05_18_27_35 or web01_2026_09_05_23_57
+  const stdMatch = remainder.match(
+    /^(.*?)_?(\d{4})_(\d{2})_(\d{2})_(\d{2})_(\d{2})(?:_(\d{2}))?(?:_(\d+))?$/,
+  );
+  if (stdMatch) {
+    const sid2 = stdMatch[1] || "";
+    const y = parseInt(stdMatch[2], 10);
+    const mo = parseInt(stdMatch[3], 10) - 1;
+    const day = parseInt(stdMatch[4], 10);
+    const hr = parseInt(stdMatch[5], 10);
+    const min = parseInt(stdMatch[6], 10);
+    const sec =
+      stdMatch[7] !== undefined ? parseInt(stdMatch[7], 10) : undefined;
+    const counter = stdMatch[8] ? `_${stdMatch[8]}` : "";
+
+
+    if (sec !== undefined) {
+      const utcDate = new Date(Date.UTC(y, mo, day, hr, min, sec));
+      const p2 = {};
+      new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Asia/Kolkata",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      })
+        .formatToParts(utcDate)
+        .forEach((x) => {
+          p2[x.type] = x.value;
+        });
+      const tsStr2 = `${p2.year}_${p2.month}_${p2.day}_${p2.hour}_${p2.minute}`;
+      return (sid2 ? `${prefix}_${sid2}` : prefix) + `_${tsStr2}${counter}${ext}`;
+    } else {
+      const tsStr3 = `${stdMatch[2]}_${stdMatch[3]}_${stdMatch[4]}_${stdMatch[5]}_${stdMatch[6]}`;
+      return (sid2 ? `${prefix}_${sid2}` : prefix) + `_${tsStr3}${counter}${ext}`;
+    }
+  }
+
+
+  return filename;
+}
+
+
 function showLoading(on) {
   els.loadingOverlay.classList.toggle("visible", on);
 }
+
 
 function showToast(msg, isError = false) {
   clearTimeout(_toastTimer);
@@ -103,12 +235,14 @@ function showToast(msg, isError = false) {
   }, 3500);
 }
 
+
 function setView(name) {
   _currentView = name;
   for (const [key, el] of Object.entries(views)) {
-    el.hidden = key !== name;
+    if (el) el.hidden = key !== name;
   }
 }
+
 
 function pulseDot() {
   els.refreshDot.classList.remove("pulsing");
@@ -118,15 +252,18 @@ function pulseDot() {
   setTimeout(() => els.refreshDot.classList.remove("pulsing"), 1000);
 }
 
+
 // ────────────────────────────────────────────────────────────────
 // Rendering: health badge
 // ────────────────────────────────────────────────────────────────
+
 
 function healthLabel(h) {
   return (
     { healthy: "Healthy", stale: "Stale", unknown: "Unknown" }[h] || "Unknown"
   );
 }
+
 
 function createHealthBadge(health) {
   const span = document.createElement("span");
@@ -135,9 +272,11 @@ function createHealthBadge(health) {
   return span;
 }
 
+
 // ────────────────────────────────────────────────────────────────
 // Rendering: change chips
 // ────────────────────────────────────────────────────────────────
+
 
 function buildChangeChips(summary, hasChanges) {
   if (!hasChanges || !summary) {
@@ -169,9 +308,11 @@ function buildChangeChips(summary, hasChanges) {
   return chips;
 }
 
+
 // ────────────────────────────────────────────────────────────────
 // Rendering: server card
 // ────────────────────────────────────────────────────────────────
+
 
 function buildCard(srv) {
   const card = document.createElement("article");
@@ -183,23 +324,30 @@ function buildCard(srv) {
     `${srv.server_id} — ${healthLabel(srv.health)}`,
   );
 
+
+
+
   // Header: id + badge
   const header = document.createElement("div");
   header.className = "server-card__header";
+
 
   const idEl = document.createElement("span");
   idEl.className = "server-card__id";
   idEl.textContent = srv.server_id;
 
+
   header.appendChild(idEl);
   header.appendChild(createHealthBadge(srv.health));
   card.appendChild(header);
+
 
   // Hostname
   const hn = document.createElement("div");
   hn.className = "server-card__hostname";
   hn.textContent = srv.hostname || "—";
   card.appendChild(hn);
+
 
   // Last seen
   const ls = document.createElement("div");
@@ -208,12 +356,14 @@ function buildCard(srv) {
   ls.textContent = rawTs ? `Last seen ${timeAgo(rawTs)}` : "Never seen";
   card.appendChild(ls);
 
+
   // Change chips
   const changesRow = document.createElement("div");
   changesRow.className = "server-card__changes";
   const chips = buildChangeChips(srv.change_summary, srv.has_changes);
   chips.forEach((c) => changesRow.appendChild(c));
   card.appendChild(changesRow);
+
 
   // Click / keyboard → detail
   const openDetail = () => loadDetail(srv.server_id);
@@ -225,15 +375,19 @@ function buildCard(srv) {
     }
   });
 
+
   return card;
 }
+
 
 // ────────────────────────────────────────────────────────────────
 // Render: home view
 // ────────────────────────────────────────────────────────────────
 
+
 function renderHome(servers) {
   _servers = servers;
+
 
   // Stats
   let healthy = 0,
@@ -251,6 +405,7 @@ function renderHome(servers) {
   els.countUnknown.textContent = unknown;
   els.countChanges.textContent = withChanges;
 
+
   // Cards
   els.cardGrid.innerHTML = "";
   if (servers.length === 0) {
@@ -263,9 +418,11 @@ function renderHome(servers) {
   }
 }
 
+
 // ────────────────────────────────────────────────────────────────
 // API calls
 // ────────────────────────────────────────────────────────────────
+
 
 async function fetchServers(silent = false) {
   try {
@@ -285,6 +442,7 @@ async function fetchServers(silent = false) {
     showToast("Failed to load server list: " + err.message, true);
   }
 }
+
 
 async function fetchServerDetail(serverId) {
   showLoading(true);
@@ -310,6 +468,7 @@ async function fetchServerDetail(serverId) {
   }
 }
 
+
 async function fetchApprovalHistory(serverId) {
   els.approvalHistory.innerHTML = "";
   try {
@@ -329,28 +488,35 @@ async function fetchApprovalHistory(serverId) {
   }
 }
 
+
 // ────────────────────────────────────────────────────────────────
 // Render: detail view
 // ────────────────────────────────────────────────────────────────
 
+
 function renderDetail(data) {
   const sid = data.server_id || "—";
+
 
   // Header
   els.detailServerId.textContent = sid;
   els.detailHostname.textContent = data.hostname || "—";
 
+
   const health = data.health || "unknown";
   els.detailHealthBadge.className = `health-badge health-${health}`;
   els.detailHealthBadge.textContent = healthLabel(health);
+
 
   const rawTs = data.last_seen || data.snapshot_at;
   els.detailLastSeen.textContent = rawTs
     ? `Last seen ${timeAgo(rawTs)}`
     : "Never seen";
 
+
   // Full dashboard link
   els.fullDashBtn.href = `/server/${encodeURIComponent(sid)}/dashboard`;
+
 
   // Use baseline (cumulative vs. golden) data if available; else incremental.
   const hasBaseline = !!data.baseline_diff;
@@ -361,26 +527,34 @@ function renderDetail(data) {
       : data.has_changes;
   const displayDiff = hasBaseline ? data.baseline_diff : data.diff || {};
 
+
   // Change summary chips
   els.changeChips.innerHTML = "";
   buildChangeChips(displaySummary, displayHasChanges).forEach((c) =>
     els.changeChips.appendChild(c),
   );
 
+
   // Changed files
   renderChangedFiles(displayDiff, hasBaseline);
+
 
   // Metadata
   renderMeta(data);
 }
 
+
 function renderChangedFiles(diff, isBaseline) {
   const list = els.changedFilesList;
   list.innerHTML = "";
 
+
   const added = (diff && diff.added) || [];
   const deleted = (diff && diff.deleted) || [];
   const modified = (diff && diff.modified) || [];
+
+
+
 
   if (added.length === 0 && deleted.length === 0 && modified.length === 0) {
     const msg = document.createElement("div");
@@ -390,6 +564,7 @@ function renderChangedFiles(diff, isBaseline) {
     return;
   }
 
+
   // Label: let user know if this is baseline or incremental data.
   if (isBaseline) {
     const lbl = document.createElement("div");
@@ -397,6 +572,7 @@ function renderChangedFiles(diff, isBaseline) {
     lbl.textContent = "Changes vs. baseline (first snapshot)";
     list.appendChild(lbl);
   }
+
 
   // diff.added/deleted are [{path, type}] objects; diff.modified are [{path, changes, ...}] objects.
   const allChanges = [
@@ -417,24 +593,30 @@ function renderChangedFiles(diff, isBaseline) {
     })),
   ];
 
+
   allChanges.forEach((entry) => {
     const badge = entry.badge;
     const filePath = entry.path;
+
 
     const item = document.createElement("div");
     item.className = "file-item";
     item.setAttribute("role", "listitem");
 
+
     const b = document.createElement("span");
     b.className = `file-item__badge file-item__badge--${badge}`;
     b.textContent = badge;
+
 
     const p = document.createElement("span");
     p.className = "file-item__path";
     p.textContent = filePath;
 
+
     item.appendChild(b);
     item.appendChild(p);
+
 
     if (entry.meta) {
       const m = document.createElement("span");
@@ -443,25 +625,29 @@ function renderChangedFiles(diff, isBaseline) {
       item.appendChild(m);
     }
 
+
     list.appendChild(item);
   });
 }
+
 
 function renderMeta(data) {
   const dl = els.snapshotMeta;
   dl.innerHTML = "";
 
+
   const fields = [
     ["Server ID", data.server_id],
     ["Hostname", data.hostname],
-    ["Snapshot at", data.snapshot_at],
-    ["Last seen", data.last_seen],
+    ["Snapshot at", formatDate(data.snapshot_at)],
+    ["Last seen", formatDate(data.last_seen)],
     [
       "Agent version",
       data.agent_version || data.snapshot?.agent_version || "—",
     ],
     ["Health", healthLabel(data.health || "unknown")],
   ];
+
 
   for (const [label, val] of fields) {
     if (!val) continue;
@@ -474,9 +660,11 @@ function renderMeta(data) {
   }
 }
 
+
 function renderApprovalHistory(reports) {
   const list = els.approvalHistory;
   list.innerHTML = "";
+
 
   const entries = Object.keys(reports).map((basename) => ({
     basename,
@@ -490,6 +678,7 @@ function renderApprovalHistory(reports) {
     return;
   }
 
+
   // Most recently decided/created first.
   entries.sort((a, b) => {
     const at = a.decided_at || a.created_at || "";
@@ -497,22 +686,27 @@ function renderApprovalHistory(reports) {
     return bt.localeCompare(at);
   });
 
+
   entries.forEach((entry) => {
     const item = document.createElement("div");
     item.className = "history-item";
     item.setAttribute("role", "listitem");
 
+
     const pill = document.createElement("span");
     pill.className = `history-item__pill history-item__pill--${entry.status || "pending"}`;
     pill.textContent = entry.status || "pending";
 
+
     const body = document.createElement("div");
     body.className = "history-item__body";
 
+
     const label = document.createElement("div");
     label.className = "history-item__label";
-    label.textContent = entry.report_label || entry.basename;
+    label.textContent = entry.report_label || formatEntityName(entry.basename);
     body.appendChild(label);
+
 
     const meta = document.createElement("div");
     meta.className = "history-item__meta";
@@ -521,8 +715,9 @@ function renderApprovalHistory(reports) {
     const changeInfo =
       `${entry.change_count ?? 0} change(s)` +
       (entry.threshold_exceeded ? " (threshold exceeded)" : "");
-    meta.textContent = `${whenLabel} ${timeAgo(when)} · ${changeInfo}`;
+    meta.textContent = `${whenLabel} ${formatDate(when)} (${timeAgo(when)}) · ${changeInfo}`;
     body.appendChild(meta);
+
 
     if (entry.description) {
       const desc = document.createElement("div");
@@ -531,15 +726,20 @@ function renderApprovalHistory(reports) {
       body.appendChild(desc);
     }
 
+
     item.appendChild(pill);
     item.appendChild(body);
     list.appendChild(item);
   });
 }
 
+
+
+
 // ────────────────────────────────────────────────────────────────
 // Navigation
 // ────────────────────────────────────────────────────────────────
+
 
 function loadDetail(serverId) {
   // Update URL without navigating
@@ -551,19 +751,23 @@ function loadDetail(serverId) {
   fetchServerDetail(serverId);
 }
 
+
 function goHome() {
   history.pushState({ view: "home" }, "", "/central.html");
   setView("home");
 }
 
+
 // ────────────────────────────────────────────────────────────────
 // Auto-refresh + countdown
 // ────────────────────────────────────────────────────────────────
+
 
 function startRefresh() {
   stopRefresh();
   _countdown = REFRESH_INTERVAL_SECS;
   updateCountdown();
+
 
   _countdownTimer = setInterval(() => {
     _countdown--;
@@ -578,20 +782,25 @@ function startRefresh() {
   }, 1000);
 }
 
+
 function stopRefresh() {
   clearInterval(_countdownTimer);
   clearInterval(_refreshTimer);
 }
 
+
 function updateCountdown() {
   els.refreshCountdown.textContent = `${_countdown}s`;
 }
+
 
 // ────────────────────────────────────────────────────────────────
 // Event wiring
 // ────────────────────────────────────────────────────────────────
 
+
 els.backBtn.addEventListener("click", goHome);
+
 
 if (els.logoutBtn) {
   els.logoutBtn.addEventListener("click", () => {
@@ -602,6 +811,7 @@ if (els.logoutBtn) {
   });
 }
 
+
 window.addEventListener("popstate", (e) => {
   const state = e.state || {};
   if (state.view === "detail" && state.serverId) {
@@ -611,14 +821,17 @@ window.addEventListener("popstate", (e) => {
   }
 });
 
+
 // ────────────────────────────────────────────────────────────────
 // Boot
 // ────────────────────────────────────────────────────────────────
+
 
 async function init() {
   showLoading(true);
   await fetchServers(false);
   startRefresh();
+
 
   // If URL is already a /server/<id> path, load detail
   const m = window.location.pathname.match(/^\/server\/([^/]+)$/);
@@ -627,4 +840,8 @@ async function init() {
   }
 }
 
+
 init();
+
+
+

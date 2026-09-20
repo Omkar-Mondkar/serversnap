@@ -3,17 +3,13 @@
 report_approval_store.py
 ========================
 
-
 Per-report approval state store.
-
 
 Tracks the approval status of every drift report file individually, keyed by
 the report's basename (e.g. "report_web01_2026_07_29_09_54_16.json").
 
-
 State file location:
     <approvals_dir>/report_approvals_<server_id>.json
-
 
 Schema:
 {
@@ -31,7 +27,6 @@ Schema:
 }
 """
 
-
 from __future__ import annotations
 
 
@@ -43,11 +38,8 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 
-
-
 class ReportApprovalStore:
     """Per-report approval state, persisted as a single JSON file."""
-
 
     def __init__(self, server_id: str, approvals_dir: str) -> None:
         self.server_id = server_id
@@ -55,11 +47,9 @@ class ReportApprovalStore:
         self.approvals_dir.mkdir(parents=True, exist_ok=True)
         self._store_path = self.approvals_dir / f"report_approvals_{server_id}.json"
 
-
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
-
 
     def _load(self) -> Dict[str, Any]:
         try:
@@ -69,7 +59,6 @@ class ReportApprovalStore:
         except (OSError, json.JSONDecodeError):
             pass
         return {}
-
 
     def _save(self, data: Dict[str, Any]) -> None:
         """Atomic write via temp file + os.replace."""
@@ -88,21 +77,17 @@ class ReportApprovalStore:
                 pass
             raise
 
-
     @staticmethod
     def _now() -> str:
         return datetime.now(timezone.utc).isoformat()
-
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
-
     def get_all(self) -> Dict[str, Any]:
         """Return the full store dict (keyed by report basename)."""
         return self._load()
-
 
     def set_pending(
         self,
@@ -113,9 +98,6 @@ class ReportApprovalStore:
     ) -> None:
         """Register a report as pending (only if not already decided).
 
-
-
-
         If the report already has a status of 'approved' or 'rejected' this
         call is a no-op — we never downgrade a decision.
         """
@@ -123,7 +105,6 @@ class ReportApprovalStore:
         existing = data.get(report_basename, {})
         if existing.get("status") in ("approved", "rejected"):
             return  # decision already made — preserve it
-
 
         data[report_basename] = {
             "status": "pending",
@@ -137,9 +118,10 @@ class ReportApprovalStore:
         }
         self._save(data)
 
-
     def approve(self, report_basename: str, description: str = "") -> bool:
         """Mark a report as approved. Returns True on success.
+
+
 
 
         ``description`` is an optional free-text reason entered by the
@@ -155,9 +137,10 @@ class ReportApprovalStore:
         self._save(data)
         return True
 
-
     def reject(self, report_basename: str, description: str = "") -> bool:
         """Mark a report as rejected. Returns True on success.
+
+
 
 
         ``description`` is an optional free-text reason entered by the
@@ -172,6 +155,42 @@ class ReportApprovalStore:
         self._save(data)
         return True
 
+    def auto_reject_superseded(
+        self,
+        current_basename: str,
+        reason: str = "Auto-rejected — superseded by a newer report",
+    ) -> list:
+        """Reject every still-pending report other than ``current_basename``.
+
+
+        A pending report that was never decided before the next snapshot ran
+        is stale: its diff no longer describes the live host. Rejecting it
+        keeps the golden baseline untouched and leaves exactly one report
+        awaiting a human decision. Returns the basenames that were rejected.
+        """
+        data = self._load()
+        rejected = []
+        for name, record in data.items():
+            if name == current_basename or not isinstance(record, dict):
+                continue
+            if record.get("status") != "pending":
+                continue
+            record["status"] = "rejected"
+            record["decided_at"] = self._now()
+            record["description"] = reason
+            record["auto_rejected"] = True
+            rejected.append(name)
+        if rejected:
+            self._save(data)
+        return rejected
+
+    def get_pending(self) -> Dict[str, Any]:
+        """Return only the reports still awaiting a decision."""
+        return {
+            name: record
+            for name, record in self._load().items()
+            if isinstance(record, dict) and record.get("status") == "pending"
+        }
 
     def get_status_summary(self) -> Dict[str, Any]:
         """Return a summary dict ready to be serialised as /api/report-status."""
@@ -182,10 +201,6 @@ class ReportApprovalStore:
             "reports": data,
         }
 
-
     def get_record(self, report_basename: str) -> Optional[Dict[str, Any]]:
         """Return the record for one report, or None if unknown."""
         return self._load().get(report_basename)
-
-
-
