@@ -313,6 +313,75 @@
   };
   var currentTarget = "report";
 
+  function isBaselineReport(reportData) {
+    var r = reportData;
+    if (!r) {
+      if (selectedIndices && selectedIndices.length === 1) {
+        r = (reports[selectedIndices[0]] || {}).data;
+      } else if (reports.length > 0) {
+        r = (reports[reports.length - 1] || {}).data;
+      }
+    }
+    if (!r) return false;
+    if (r.is_initial_baseline === true) return true;
+    if (
+      r.previous_snapshot === null ||
+      r.previous_snapshot === undefined ||
+      r.previous_snapshot === ""
+    ) {
+      return true;
+    }
+    return false;
+  }
+
+  function updateStatusBar(isApproved, a, d, m, u) {
+    var bar = q("statusBar");
+    if (!bar) return;
+    if (isApproved) {
+      bar.classList.add("is-approved");
+      bar.title = "Status: Approved (all changes reviewed)";
+      if (els.segAdded) els.segAdded.style.width = "0%";
+      if (els.segDeleted) els.segDeleted.style.width = "0%";
+      if (els.segModified) els.segModified.style.width = "0%";
+      if (els.segUnchanged) els.segUnchanged.style.width = "0%";
+    } else {
+      bar.classList.remove("is-approved");
+      var added = a || 0;
+      var deleted = d || 0;
+      var modified = m || 0;
+      var unchanged = u || 0;
+      var total = added + deleted + modified + unchanged;
+      function pct(n) {
+        return total > 0 ? ((100 * n) / total).toFixed(2) + "%" : "0%";
+      }
+      if (els.segAdded) {
+        els.segAdded.style.width = pct(added);
+        els.segAdded.title = "Added: " + added;
+      }
+      if (els.segDeleted) {
+        els.segDeleted.style.width = pct(deleted);
+        els.segDeleted.title = "Deleted: " + deleted;
+      }
+      if (els.segModified) {
+        els.segModified.style.width = pct(modified);
+        els.segModified.title = "Modified: " + modified;
+      }
+      if (els.segUnchanged) {
+        els.segUnchanged.style.width = pct(unchanged);
+        els.segUnchanged.title = "Unchanged: " + unchanged;
+      }
+      bar.title =
+        "File breakdown: " +
+        added +
+        " added, " +
+        deleted +
+        " deleted, " +
+        modified +
+        " modified, " +
+        unchanged +
+        " unchanged";
+    }
+  }
 
   function switchTab(name) {
     TAB_IDS.forEach(function (id) {
@@ -325,7 +394,6 @@
       btn.classList.toggle("active", active);
     });
 
-
     if (name === "config") loadConfig();
     if (name === "audit") renderAuditPipeline();
     if (name === "approval") switchTarget(currentTarget);
@@ -336,11 +404,9 @@
     }
   }
 
-
   function switchTarget(name) {
     if (TARGET_IDS.indexOf(name) === -1) name = "report";
     currentTarget = name;
-
 
     TARGET_IDS.forEach(function (id) {
       var view = q(TARGET_VIEWS[id]);
@@ -350,7 +416,6 @@
       view.classList.toggle("active-view", active);
     });
 
-
     Array.prototype.forEach.call(
       document.querySelectorAll(".seg-toggle__btn"),
       function (b) {
@@ -358,14 +423,12 @@
       },
     );
 
-
     /* The path filter only applies to the file-drift changes tab. */
     if (els.searchFieldWrap)
       els.searchFieldWrap.style.display = name === "files" ? "" : "none";
 
-
     /* Requirement 2: After switching tabs, dont show the tab bar overall approvals inputs */
-    var showTabBarApprovals = name === "report";
+    var showTabBarApprovals = name === "report" && approvalState.report === "pending";
     var barActions = q("tabBarApprovalActions");
     var barTarget = q("tabBarDecisionTarget");
     if (barActions) barActions.style.display = showTabBarApprovals ? "" : "none";
@@ -632,7 +695,7 @@
       var basename = entry.file
         ? entry.file.split("/").pop().split("\\").pop()
         : "";
-      var isBase = !(entry.data && entry.data.previous_snapshot);
+      var isBase = isBaselineReport(entry.data);
       var rMeta = (thresholdData.reports || {})[basename];
       if (
         rMeta &&
@@ -756,15 +819,24 @@
     animateCount(els.countUnchanged, totalUnchanged);
 
 
-    var total =
-      allAdded.length + allDeleted.length + allModified.length + totalUnchanged;
-    function pct(n) {
-      return total > 0 ? ((100 * n) / total).toFixed(2) + "%" : "0%";
+    var isAppr = false;
+    if (indices.length === 1) {
+      var entry = reports[indices[0]];
+      var bn = entry.file ? entry.file.split("/").pop().split("\\").pop() : "";
+      var rMeta = (thresholdData.reports || {})[bn];
+      var isBase = isBaselineReport(entry.data);
+      isAppr =
+        isBase ||
+        (rMeta && rMeta.status === "approved") ||
+        approvalState.report === "approved";
     }
-    els.segAdded.style.width = pct(allAdded.length);
-    els.segDeleted.style.width = pct(allDeleted.length);
-    els.segModified.style.width = pct(allModified.length);
-    els.segUnchanged.style.width = pct(totalUnchanged);
+    updateStatusBar(
+      isAppr,
+      allAdded.length,
+      allDeleted.length,
+      allModified.length,
+      totalUnchanged,
+    );
 
 
     var hasFileChanges =
@@ -1077,18 +1149,13 @@
         animateCount(els.countDeleted, deleted.length);
         animateCount(els.countModified, modified.length);
         animateCount(els.countUnchanged, summary.unchanged || 0);
-        var total =
-          added.length +
-          deleted.length +
-          modified.length +
-          (summary.unchanged || 0);
-        function pct(n) {
-          return total ? ((n * 100) / total).toFixed(2) + "%" : "0%";
-        }
-        els.segAdded.style.width = pct(added.length);
-        els.segDeleted.style.width = pct(deleted.length);
-        els.segModified.style.width = pct(modified.length);
-        els.segUnchanged.style.width = pct(summary.unchanged || 0);
+        updateStatusBar(
+          false,
+          added.length,
+          deleted.length,
+          modified.length,
+          summary.unchanged || 0,
+        );
         var hasFileDiffs = added.length || deleted.length || modified.length;
         els.emptyState.style.display = hasFileDiffs ? "none" : "";
         if (els.filesEmptyState)
@@ -1203,7 +1270,14 @@
         .map(function (x) {
           return (
             "<tr><td>" +
+            '<span style="font-weight:600">' +
             esc(x.name) +
+            "</span>" +
+            (x.path
+              ? '<div class="mono" style="font-size:11px;color:var(--text-dim);word-break:break-all">' +
+                esc(x.path) +
+                "</div>"
+              : "") +
             "</td><td>" +
             formatBytes(x.size || 0) +
             "</td><td>" +
@@ -1225,7 +1299,14 @@
         .map(function (x) {
           return (
             "<tr><td>" +
+            '<span style="font-weight:600">' +
             esc(x.name) +
+            "</span>" +
+            (x.path
+              ? '<div class="mono" style="font-size:11px;color:var(--text-dim);word-break:break-all">' +
+                esc(x.path) +
+                "</div>"
+              : "") +
             "</td><td>" +
             esc(x.subtype || "script") +
             "</td><td>" +
@@ -2069,6 +2150,18 @@
     var cont = q("driftAuditContent");
     if (!cont) return;
 
+    var entry =
+      selectedIndices && selectedIndices.length === 1
+        ? reports[selectedIndices[0]]
+        : reports.length
+          ? reports[reports.length - 1]
+          : null;
+    var rData = (entry && entry.data) || {};
+    if (isBaselineReport(rData)) {
+      cont.innerHTML = "";
+      return;
+    }
+
     var totalFileChanges = 0;
     var added = 0;
     var deleted = 0;
@@ -2214,8 +2307,19 @@
       })
       .then(function (data) {
         var catStatus = (data.categories && data.categories.drift) || {};
-        var isApproved = catStatus.status === "approved";
-        var isRejected = catStatus.status === "rejected";
+        var bn =
+          entry && entry.file
+            ? entry.file.split("/").pop().split("\\").pop()
+            : "";
+        var rMeta = (thresholdData.reports || {})[bn] || {};
+        var isApproved =
+          catStatus.status === "approved" ||
+          rMeta.status === "approved" ||
+          approvalState.files === "approved";
+        var isRejected =
+          catStatus.status === "rejected" ||
+          rMeta.status === "rejected" ||
+          approvalState.files === "rejected";
 
         if (isApproved || isRejected) {
           var statusDot = isApproved ? "dot-added" : "dot-deleted";
@@ -2250,6 +2354,18 @@
         }
       })
       .catch(function () {
+        var bn =
+          entry && entry.file
+            ? entry.file.split("/").pop().split("\\").pop()
+            : "";
+        var rMeta = (thresholdData.reports || {})[bn] || {};
+        if (
+          rMeta.status === "approved" ||
+          approvalState.files === "approved"
+        ) {
+          cont.innerHTML = "";
+          return;
+        }
         if (totalFileChanges > 0) {
           cont.innerHTML = buildDriftForm();
           wireDriftButtons();
@@ -2301,56 +2417,49 @@
   }
   /* ── Tab Badges & Baseline Deciders (App & Network) ───── */
   function updateTabBadges() {
-    var repCount = 0;
     var fileCount = 0;
+    var appTotal = 0;
+    var netTotal = 0;
+    var r = null;
+
     if (selectedIndices && selectedIndices.length === 1) {
-      var r = reports[selectedIndices[0]].data || {};
-      var s = r.summary || {};
-      var fc = (s.added || 0) + (s.deleted || 0) + (s.modified || 0);
-      fileCount = fc;
+      r = (reports[selectedIndices[0]] || {}).data || {};
+    } else if (selectedIndices && selectedIndices.length > 1) {
+      selectedIndices.forEach(function (idx) {
+        var dr = (reports[idx] || {}).data || {};
+        if (!isBaselineReport(dr)) {
+          var s = dr.summary || {};
+          fileCount += (s.added || 0) + (s.deleted || 0) + (s.modified || 0);
+        }
+      });
+    } else if (reports.length > 0) {
+      r = (reports[reports.length - 1] || {}).data || {};
+    }
+
+    if (r) {
+      if (!isBaselineReport(r)) {
+        var s = r.summary || {};
+        fileCount = (s.added || 0) + (s.deleted || 0) + (s.modified || 0);
+      }
       var rApp = r.app_diff || thresholdData.app_diff || {};
-      var ac =
+      appTotal =
         (rApp.added_apps || []).length +
         (rApp.removed_apps || []).length +
         (rApp.updated_apps || []).length;
       var rNet = r.network_diff || thresholdData.network_diff || {};
-      var nc = Object.keys(rNet.modified_settings || {}).length;
-      repCount = fc + ac + nc;
-    } else if (selectedIndices && selectedIndices.length > 1) {
-      selectedIndices.forEach(function (idx) {
-        var r = reports[idx].data || {};
-        var s = r.summary || {};
-        var fc = (s.added || 0) + (s.deleted || 0) + (s.modified || 0);
-        fileCount += fc;
-        repCount += fc;
-      });
-    } else if (reports.length > 0) {
-      var lastR = reports[reports.length - 1].data || {};
-      var s = lastR.summary || {};
-      var fc = (s.added || 0) + (s.deleted || 0) + (s.modified || 0);
-      fileCount = fc;
-      var rApp = lastR.app_diff || thresholdData.app_diff || {};
-      var ac =
-        (rApp.added_apps || []).length +
-        (rApp.removed_apps || []).length +
-        (rApp.updated_apps || []).length;
-      var rNet = lastR.network_diff || thresholdData.network_diff || {};
-      var nc = Object.keys(rNet.modified_settings || {}).length;
-      repCount = fc + ac + nc;
+      netTotal = Object.keys(rNet.modified_settings || {}).length;
     }
-    var bRep = q("badge-reports");
-    if (bRep) {
-      if (repCount > 0) {
-        bRep.textContent = repCount;
-        bRep.style.display = "inline-flex";
-      } else {
-        bRep.style.display = "none";
-      }
-    }
+
+    var isReportApproved = approvalState.report === "approved";
+    if (r && isBaselineReport(r)) isReportApproved = true;
 
     var bFiles = q("badge-files");
     if (bFiles) {
-      if (fileCount > 0) {
+      if (
+        !isReportApproved &&
+        approvalState.files === "pending" &&
+        fileCount > 0
+      ) {
         bFiles.textContent = fileCount;
         bFiles.style.display = "inline-flex";
       } else {
@@ -2358,22 +2467,13 @@
       }
     }
 
-
-    var appDiff = (thresholdData && thresholdData.app_diff) || {};
-    if (
-      !appDiff.category &&
-      reports.length &&
-      reports[reports.length - 1].data.app_diff
-    ) {
-      appDiff = reports[reports.length - 1].data.app_diff;
-    }
-    var appTotal =
-      (appDiff.added_apps || []).length +
-      (appDiff.removed_apps || []).length +
-      (appDiff.updated_apps || []).length;
     var bApp = q("badge-app");
     if (bApp) {
-      if (appTotal > 0) {
+      if (
+        !isReportApproved &&
+        approvalState.snapshot === "pending" &&
+        appTotal > 0
+      ) {
         bApp.textContent = appTotal;
         bApp.style.display = "inline-flex";
       } else {
@@ -2381,19 +2481,13 @@
       }
     }
 
-
-    var netDiff = (thresholdData && thresholdData.network_diff) || {};
-    if (
-      !netDiff.category &&
-      reports.length &&
-      reports[reports.length - 1].data.network_diff
-    ) {
-      netDiff = reports[reports.length - 1].data.network_diff;
-    }
-    var netTotal = Object.keys(netDiff.modified_settings || {}).length;
     var bNet = q("badge-network");
     if (bNet) {
-      if (netTotal > 0) {
+      if (
+        !isReportApproved &&
+        approvalState.network === "pending" &&
+        netTotal > 0
+      ) {
         bNet.textContent = netTotal;
         bNet.style.display = "inline-flex";
       } else {
@@ -2401,8 +2495,22 @@
       }
     }
 
+    var pendingTabs = 0;
+    if (!isReportApproved) {
+      if (approvalState.files === "pending" && fileCount > 0) pendingTabs++;
+      if (approvalState.snapshot === "pending" && appTotal > 0) pendingTabs++;
+      if (approvalState.network === "pending" && netTotal > 0) pendingTabs++;
+    }
 
-    updateApprovalBar();
+    var bRep = q("badge-reports");
+    if (bRep) {
+      if (pendingTabs > 0 && !isReportApproved) {
+        bRep.textContent = pendingTabs;
+        bRep.style.display = "inline-flex";
+      } else {
+        bRep.style.display = "none";
+      }
+    }
   }
 
 
@@ -2784,8 +2892,11 @@
           "success",
         );
         if (category === "drift") {
+          approvalState.files = action === "approve" ? "approved" : "rejected";
           renderDriftAudit();
         } else if (category === "app") {
+          approvalState.snapshot =
+            action === "approve" ? "approved" : "rejected";
           if (action === "approve") {
             if (thresholdData.app_diff) thresholdData.app_diff = {};
             if (reports.length && reports[reports.length - 1].data) {
@@ -2794,6 +2905,8 @@
           }
           renderAppAudit();
         } else if (category === "network") {
+          approvalState.network =
+            action === "approve" ? "approved" : "rejected";
           if (action === "approve") {
             if (thresholdData.network_diff) thresholdData.network_diff = {};
             if (reports.length && reports[reports.length - 1].data) {
@@ -2845,7 +2958,9 @@
 
 
   function fileChangeCount() {
-    var s = activeReportData().summary || {};
+    var r = activeReportData();
+    if (isBaselineReport(r)) return 0;
+    var s = r.summary || {};
     return (s.added || 0) + (s.deleted || 0) + (s.modified || 0);
   }
 
@@ -2887,20 +3002,34 @@
       })
       .then(function (d) {
         var cats = d.categories || {};
-        approvalState.files =
-          fileChangeCount() > 0
+        var bn = currentReportBasename();
+        var rMeta = (thresholdData.reports || {})[bn] || {};
+        var isReportApproved =
+          rMeta.status === "approved" || isBaselineReport(activeReportData());
+
+        approvalState.files = isReportApproved
+          ? "approved"
+          : fileChangeCount() > 0
             ? _mapCategoryStatus(cats.drift, fileChangeCount())
             : "none";
-        approvalState.snapshot = _mapCategoryStatus(cats.app, appChangeCount());
-        approvalState.network = _mapCategoryStatus(
-          cats.network,
-          netChangeCount(),
-        );
+        approvalState.snapshot = isReportApproved
+          ? appChangeCount() > 0
+            ? "approved"
+            : "none"
+          : _mapCategoryStatus(cats.app, appChangeCount());
+        approvalState.network = isReportApproved
+          ? netChangeCount() > 0
+            ? "approved"
+            : "none"
+          : _mapCategoryStatus(cats.network, netChangeCount());
         approvalState.report = computeReportStatus();
         if (approvalState.report === "approved") {
-          var bn = currentReportBasename();
+          var statusBar = q("statusBar");
+          if (statusBar) {
+            statusBar.classList.add("is-approved");
+            statusBar.title = "Status: Approved (all changes reviewed)";
+          }
           if (bn && typeof window.approveReport === "function") {
-            var rMeta = (thresholdData.reports || {})[bn] || {};
             if (rMeta.status !== "approved") {
               var user =
                 (q("approverName") && q("approverName").value.trim()) ||
@@ -2914,23 +3043,44 @@
           }
         }
         updateApprovalBar();
+        updateTabBadges();
       })
       .catch(function () {
-        // Endpoint unavailable (older agent): fall back to change counts only.
-        approvalState.files = fileChangeCount() ? "pending" : "none";
-        approvalState.snapshot = appChangeCount() ? "pending" : "none";
-        approvalState.network = netChangeCount() ? "pending" : "none";
-        approvalState.report = computeReportStatus();
+        var bn = currentReportBasename();
+        var rMeta = (thresholdData.reports || {})[bn] || {};
+        var isReportApproved =
+          rMeta.status === "approved" || isBaselineReport(activeReportData());
+        if (isReportApproved) {
+          approvalState.files = fileChangeCount() ? "approved" : "none";
+          approvalState.snapshot = appChangeCount() ? "approved" : "none";
+          approvalState.network = netChangeCount() ? "approved" : "none";
+          approvalState.report = "approved";
+        } else {
+          // Endpoint unavailable (older agent): fall back to change counts only.
+          approvalState.files = fileChangeCount() ? "pending" : "none";
+          approvalState.snapshot = appChangeCount() ? "pending" : "none";
+          approvalState.network = netChangeCount() ? "pending" : "none";
+          approvalState.report = computeReportStatus();
+        }
         updateApprovalBar();
+        updateTabBadges();
       });
   }
 
 
   function computeReportStatus() {
     var basename = currentReportBasename();
+    var r = activeReportData();
+    if (isBaselineReport(r)) {
+      return "approved";
+    }
+    var meta = (thresholdData.reports || {})[basename];
+    if (meta && meta.status === "approved") {
+      return "approved";
+    }
     var totalChanges = fileChangeCount() + appChangeCount() + netChangeCount();
     if (totalChanges === 0) {
-      return "none";
+      return "approved";
     }
     if (
       approvalState.files === "pending" ||
@@ -2956,7 +3106,6 @@
     if (!basename) {
       return "pending";
     }
-    var meta = (thresholdData.reports || {})[basename];
     if (meta && meta.status) {
       return meta.status;
     }
@@ -2973,7 +3122,8 @@
 
 
     /* Requirement 2: After switching tabs, dont show the tab bar overall approvals inputs */
-    var showTabBarApprovals = currentTarget === "report";
+    var showTabBarApprovals =
+      currentTarget === "report" && approvalState.report === "pending";
     var barActions = q("tabBarApprovalActions");
     var barTarget = q("tabBarDecisionTarget");
     if (barActions) barActions.style.display = showTabBarApprovals ? "" : "none";
@@ -3072,12 +3222,22 @@
     }
 
 
+    if (approvalState.report === "approved") {
+      var statusBar = q("statusBar");
+      if (statusBar) {
+        statusBar.classList.add("is-approved");
+        statusBar.title = "Status: Approved (all changes reviewed)";
+      }
+    }
+
     var locked =
       comparing || st !== "pending" || !!_decisionBusy[currentTarget];
     var ba = q("btnApprove");
     var br = q("btnReject");
     if (ba) ba.disabled = locked;
     if (br) br.disabled = locked;
+
+    updateTabBadges();
   }
 
 
@@ -3401,15 +3561,18 @@
   function isPathCovered(changedPath, cfgPath) {
     var base = cfgPath && cfgPath.path;
     if (!base) return false;
-    if (changedPath === base) return true;
+    var normBase = base === "/" ? "/" : base.replace(/\/+$/, "");
+    var normChanged =
+      changedPath === "/" ? "/" : changedPath.replace(/\/+$/, "");
+    if (normChanged === normBase) return true;
     if (cfgPath.recursive === false) {
       // Non-recursive: only direct children of base are covered.
-      var lastSlash = changedPath.lastIndexOf("/");
-      var parent = lastSlash > 0 ? changedPath.slice(0, lastSlash) : "/";
-      return parent === base;
+      var lastSlash = normChanged.lastIndexOf("/");
+      var parent = lastSlash > 0 ? normChanged.slice(0, lastSlash) : "/";
+      return parent === normBase;
     }
     // Recursive (default): anything under base/ is covered.
-    return changedPath.indexOf(base.replace(/\/$/, "") + "/") === 0;
+    return normChanged.indexOf(normBase + "/") === 0;
   }
   function renderUncoveredPathsBanner(paths) {
     var banner = q("uncoveredPathsBanner");
@@ -3635,6 +3798,9 @@
     if (!pv.startsWith("/")) {
       showToast("Path must be absolute (start with /)", "error");
       return;
+    }
+    if (pv.length > 1 && pv.endsWith("/")) {
+      pv = pv.replace(/\/+$/, "");
     }
     var entry = {
       path: pv,

@@ -1277,6 +1277,27 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
             self._send_json({"error": str(exc)}, 500)
             return
 
+        # Replace embedded CSS with the latest public/visualize_report.css if available
+        css_path = os.path.join(self.public_dir, "visualize_report.css")
+        if os.path.isfile(css_path):
+            try:
+                with open(css_path, "r", encoding="utf-8") as _css_fh:
+                    latest_css = _css_fh.read()
+                html_str = data.decode("utf-8", errors="replace")
+                c_start = html_str.find("<style>")
+                c_end = html_str.find("</style>")
+                if c_start != -1 and c_end != -1:
+                    html_str = (
+                        html_str[: c_start + 7]
+                        + "\n"
+                        + latest_css
+                        + "\n"
+                        + html_str[c_end :]
+                    )
+                    data = html_str.encode("utf-8")
+            except Exception:
+                pass
+
         # Replace embedded JS with the latest public/visualize_report.js if available
         js_path = os.path.join(self.public_dir, "visualize_report.js")
         if os.path.isfile(js_path):

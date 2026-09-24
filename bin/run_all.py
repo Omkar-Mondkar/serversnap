@@ -659,11 +659,16 @@ Examples:
                     except Exception as _be:
                         print_info(f"  (baseline diff skipped: {_be})")
 
-                # Attach sanitised config.
+                # Attach sanitised config (reloaded from disk to include any pending config applied during STEP 2).
                 _sensitive = {"api_key", "secret_key", "users"}
+                try:
+                    with open(config_file, "r", encoding="utf-8") as _cfh:
+                        _latest_config = json.load(_cfh)
+                except Exception:
+                    _latest_config = config
                 _payload["config"] = {
                     k: v
-                    for k, v in config.items()
+                    for k, v in _latest_config.items()
                     if k not in _sensitive and not k.startswith("_comment")
                 }
 

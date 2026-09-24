@@ -691,6 +691,13 @@ main {
 }
 .seg-unchanged {
   background: var(--gray);
+}
+.status-bar.is-approved {
+  background: var(--green);
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.35);
+}
+.status-bar.is-approved .status-seg {
+  display: none;
 } /* ─── Panel ──────────────────────────────────────────────── */
 .panel {
   background: var(--panel);

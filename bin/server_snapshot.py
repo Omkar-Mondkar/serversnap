@@ -706,6 +706,7 @@ def build_report(
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "previous_snapshot": previous_snapshot_path,
         "current_snapshot": new_snapshot_path,
+        "is_initial_baseline": previous_snapshot_path is None,
         "summary": {
             "added": len(diff["added"]),
             "deleted": len(diff["deleted"]),
