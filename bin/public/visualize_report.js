@@ -2489,20 +2489,30 @@
       }
     }
 
-    var pendingTabs = 0;
+    var totalPendingChanges = 0;
     if (!isReportApproved) {
-      if (approvalState.files === "pending" && fileCount > 0) pendingTabs++;
-      if (approvalState.snapshot === "pending" && appTotal > 0) pendingTabs++;
-      if (approvalState.network === "pending" && netTotal > 0) pendingTabs++;
+      if (approvalState.files === "pending") totalPendingChanges += fileCount;
+      if (approvalState.snapshot === "pending") totalPendingChanges += appTotal;
+      if (approvalState.network === "pending") totalPendingChanges += netTotal;
     }
 
     var bRep = q("badge-reports");
     if (bRep) {
-      if (pendingTabs > 0 && !isReportApproved) {
-        bRep.textContent = pendingTabs;
+      if (totalPendingChanges > 0 && !isReportApproved) {
+        bRep.textContent = totalPendingChanges;
         bRep.style.display = "inline-flex";
       } else {
         bRep.style.display = "none";
+      }
+    }
+
+    var bApproval = q("badge-approval");
+    if (bApproval) {
+      if (totalPendingChanges > 0 && !isReportApproved) {
+        bApproval.textContent = String(totalPendingChanges);
+        bApproval.style.display = "inline-flex";
+      } else {
+        bApproval.style.display = "none";
       }
     }
   }
@@ -3167,10 +3177,17 @@
     });
 
 
+    var totalPendingChanges = 0;
+    if (approvalState.report !== "approved") {
+      if (approvalState.files === "pending") totalPendingChanges += fileChangeCount();
+      if (approvalState.snapshot === "pending") totalPendingChanges += appChangeCount();
+      if (approvalState.network === "pending") totalPendingChanges += netChangeCount();
+    }
+
     var badge = q("badge-approval");
     if (badge) {
-      badge.textContent = String(pending);
-      badge.style.display = pending > 0 ? "inline-flex" : "none";
+      badge.textContent = String(totalPendingChanges);
+      badge.style.display = totalPendingChanges > 0 ? "inline-flex" : "none";
     }
 
 
@@ -3795,7 +3812,8 @@
       })
       .finally(function () {
         btn.disabled = false;
-        btn.innerHTML = "\u{1F4BE} Save Configuration";
+        btn.innerHTML =
+          '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Save Configuration';
       });
   }
   function renderPaths(paths) {
@@ -3924,6 +3942,19 @@
     }
     renderPaths(configData.paths);
     closePathModal();
+    scrollToSaveConfig();
+  }
+  function scrollToSaveConfig() {
+    setTimeout(function () {
+      var saveBtn = q("saveConfigBtn");
+      if (saveBtn) {
+        saveBtn.scrollIntoView({ behavior: "smooth", block: "center" });
+        saveBtn.classList.add("btn-highlight-pulse");
+        setTimeout(function () {
+          saveBtn.classList.remove("btn-highlight-pulse");
+        }, 2200);
+      }
+    }, 140);
   }
   function deletePath(idx) {
     if (!configData || !configData.paths || !configData.paths[idx]) return;
@@ -3932,6 +3963,7 @@
     configData.paths.splice(idx, 1);
     renderPaths(configData.paths);
     showToast("Path removed (save to persist)", "info");
+    scrollToSaveConfig();
   }
   function renderExceptions(exc) {
     q("modalExceptions").innerHTML = (exc || [])

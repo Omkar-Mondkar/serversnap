@@ -22,7 +22,16 @@
   ============================================================ -->
     <header class="top-bar" role="banner">
       <div class="top-bar__brand">
-        <span class="top-bar__logo" aria-hidden="true">⬡</span>
+        <span class="top-bar__logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
+            <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
+            <line x1="6" y1="6" x2="6.01" y2="6" stroke-width="2.5" />
+            <line x1="6" y1="18" x2="6.01" y2="18" stroke-width="2.5" />
+            <line x1="10" y1="6" x2="18" y2="6" />
+            <line x1="10" y1="18" x2="18" y2="18" />
+          </svg>
+        </span>
         <span class="top-bar__name">ServerSnap <strong>Central</strong></span>
       </div>
       <div class="top-bar__actions">
@@ -71,7 +80,16 @@
 
         <!-- Empty state -->
         <div id="empty-state" class="empty-state" hidden>
-          <div class="empty-state__icon" aria-hidden="true">📡</div>
+          <div class="empty-state__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
+              <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
+              <line x1="6" y1="6" x2="6.01" y2="6" stroke-width="2.5" />
+              <line x1="6" y1="18" x2="6.01" y2="18" stroke-width="2.5" />
+              <line x1="10" y1="6" x2="18" y2="6" />
+              <line x1="10" y1="18" x2="18" y2="18" />
+            </svg>
+          </div>
           <h2 class="empty-state__title">No servers yet</h2>
           <p class="empty-state__desc">
             Configure agents with a <code>platform.url</code> pointing here,
