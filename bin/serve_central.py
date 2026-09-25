@@ -393,54 +393,56 @@ def store_push(data_dir: str, server_id: str, payload: Dict[str, Any]) -> None:
     now_iso = datetime.now(timezone.utc).isoformat()
 
     # 1. App diff
-    app_diff = payload.get("app_diff")
-    if isinstance(app_diff, dict):
-        has_app_changes = bool(
-            app_diff.get("added_apps")
-            or app_diff.get("removed_apps")
-            or app_diff.get("updated_apps")
-            or app_diff.get("status") == "changes_detected"
-        )
-        if has_app_changes:
-            pending_data["app"] = {
-                "timestamp": app_diff.get("timestamp")
-                or payload.get("snapshot_at")
-                or now_iso,
-                "changes": app_diff,
-                "status": "pending",
-                "created_at": now_iso,
-            }
-            pending_modified = True
+    if "app_diff" in payload:
+        app_diff = payload.get("app_diff")
+        if isinstance(app_diff, dict):
+            has_app_changes = bool(
+                app_diff.get("added_apps")
+                or app_diff.get("removed_apps")
+                or app_diff.get("updated_apps")
+                or app_diff.get("status") == "changes_detected"
+            )
+            if has_app_changes:
+                pending_data["app"] = {
+                    "timestamp": app_diff.get("timestamp")
+                    or payload.get("snapshot_at")
+                    or now_iso,
+                    "changes": app_diff,
+                    "status": "pending",
+                    "created_at": now_iso,
+                }
+                pending_modified = True
+            elif "app" in pending_data:
+                pending_data.pop("app", None)
+                pending_modified = True
         elif "app" in pending_data:
             pending_data.pop("app", None)
             pending_modified = True
-    elif "app" in pending_data:
-        pending_data.pop("app", None)
-        pending_modified = True
 
     # 2. Network diff
-    net_diff = payload.get("network_diff")
-    if isinstance(net_diff, dict):
-        has_net_changes = bool(
-            net_diff.get("modified_settings")
-            or net_diff.get("status") == "changes_detected"
-        )
-        if has_net_changes:
-            pending_data["network"] = {
-                "timestamp": net_diff.get("timestamp")
-                or payload.get("snapshot_at")
-                or now_iso,
-                "changes": net_diff,
-                "status": "pending",
-                "created_at": now_iso,
-            }
-            pending_modified = True
+    if "network_diff" in payload:
+        net_diff = payload.get("network_diff")
+        if isinstance(net_diff, dict):
+            has_net_changes = bool(
+                net_diff.get("modified_settings")
+                or net_diff.get("status") == "changes_detected"
+            )
+            if has_net_changes:
+                pending_data["network"] = {
+                    "timestamp": net_diff.get("timestamp")
+                    or payload.get("snapshot_at")
+                    or now_iso,
+                    "changes": net_diff,
+                    "status": "pending",
+                    "created_at": now_iso,
+                }
+                pending_modified = True
+            elif "network" in pending_data:
+                pending_data.pop("network", None)
+                pending_modified = True
         elif "network" in pending_data:
             pending_data.pop("network", None)
             pending_modified = True
-    elif "network" in pending_data:
-        pending_data.pop("network", None)
-        pending_modified = True
 
     # 3. Drift (diff)
     diff = payload.get("diff")
@@ -683,7 +685,7 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
     # Serialises the read-modify-write cycles behind every approve/reject so
     # concurrent (or double-clicked) decisions cannot lose an audit record or
     # resurrect an already-decided item as pending.
-    _decision_lock = threading.Lock()
+    _decision_lock = threading.RLock()
 
     # ------------------------------------------------------------------
     # Helpers
@@ -1951,90 +1953,95 @@ class CentralRequestHandler(http.server.BaseHTTPRequestHandler):
         baselines from it. Without this the agent keeps diffing against the old
         baseline and re-raises the same drift.
         """
-        path = os.path.join(self.data_dir, server_id, "pending_baseline.json")
-        existing_decisions: List[Dict[str, Any]] = []
-        if os.path.isfile(path):
+        with self._decision_lock:
+            path = os.path.join(self.data_dir, server_id, "pending_baseline.json")
+            existing_decisions: List[Dict[str, Any]] = []
+            if os.path.isfile(path):
+                try:
+                    with open(path, "r", encoding="utf-8") as fh:
+                        content = json.load(fh)
+                        if isinstance(content, list):
+                            existing_decisions = content
+                        elif isinstance(content, dict):
+                            if "decisions" in content and isinstance(
+                                content["decisions"], list
+                            ):
+                                existing_decisions = content["decisions"]
+                            elif "decision" in content and isinstance(
+                                content["decision"], dict
+                            ):
+                                existing_decisions = [content["decision"]]
+                            elif "action" in content:
+                                existing_decisions = [content]
+                except Exception:
+                    existing_decisions = []
+
+            if not data or (isinstance(data, dict) and "modified_settings" in data and len(data) == 1):
+                try:
+                    with open(
+                        os.path.join(self.data_dir, server_id, "latest.json"),
+                        "r",
+                        encoding="utf-8",
+                    ) as fh:
+                        latest = json.load(fh)
+                    if category == "app":
+                        data = latest.get("app_diff") or {}
+                    elif category == "network":
+                        data = latest.get("network_data")
+                        if not data or not isinstance(data, dict):
+                            try:
+                                with open(
+                                    os.path.join(
+                                        self.data_dir,
+                                        server_id,
+                                        "baselines",
+                                        f"baseline_{server_id}_network.json",
+                                    ),
+                                    "r",
+                                    encoding="utf-8",
+                                ) as _bf:
+                                    _raw_b = json.load(_bf).get("data", {})
+                                    if _raw_b and "modified_settings" not in _raw_b:
+                                        data = _raw_b
+                            except Exception:
+                                data = None
+                    else:
+                        data = latest.get("snapshot")
+                except Exception:
+                    data = None
+
+            new_decision: Dict[str, Any] = {
+                "action": "APPROVED",
+                "category": category,
+                "snapshot_id": snapshot_id,
+                "user": user or "dashboard_user",
+                "reason": reason or "",
+                "decided_at": datetime.now(timezone.utc).isoformat(),
+            }
+            if category in ("drift", "snapshot") or (
+                isinstance(data, dict) and "entries" in data
+            ):
+                new_decision["snapshot"] = data
+            if data is not None:
+                new_decision["data"] = data
+
+            existing_decisions = [
+                d for d in existing_decisions if d.get("category") != category
+            ]
+            existing_decisions.append(new_decision)
+
             try:
-                with open(path, "r", encoding="utf-8") as fh:
-                    content = json.load(fh)
-                    if isinstance(content, list):
-                        existing_decisions = content
-                    elif isinstance(content, dict):
-                        if "decisions" in content and isinstance(
-                            content["decisions"], list
-                        ):
-                            existing_decisions = content["decisions"]
-                        elif "decision" in content and isinstance(
-                            content["decision"], dict
-                        ):
-                            existing_decisions = [content["decision"]]
-                        elif "action" in content:
-                            existing_decisions = [content]
-            except Exception:
-                existing_decisions = []
-
-        if not data:
-            try:
-                with open(
-                    os.path.join(self.data_dir, server_id, "latest.json"),
-                    "r",
-                    encoding="utf-8",
-                ) as fh:
-                    latest = json.load(fh)
-                if category == "app":
-                    data = latest.get("app_diff") or {}
-                elif category == "network":
-                    try:
-                        with open(
-                            os.path.join(
-                                self.data_dir,
-                                server_id,
-                                "baselines",
-                                f"baseline_{server_id}_network.json",
-                            ),
-                            "r",
-                            encoding="utf-8",
-                        ) as _bf:
-                            data = json.load(_bf).get("data", {})
-                    except Exception:
-                        data = latest.get("network_diff") or {}
-                else:
-                    data = latest.get("snapshot")
-            except Exception:
-                data = None
-
-        new_decision: Dict[str, Any] = {
-            "action": "APPROVED",
-            "category": category,
-            "snapshot_id": snapshot_id,
-            "user": user or "dashboard_user",
-            "reason": reason or "",
-            "decided_at": datetime.now(timezone.utc).isoformat(),
-        }
-        if category in ("drift", "snapshot") or (
-            isinstance(data, dict) and "entries" in data
-        ):
-            new_decision["snapshot"] = data
-        if data is not None:
-            new_decision["data"] = data
-
-        existing_decisions = [
-            d for d in existing_decisions if d.get("category") != category
-        ]
-        existing_decisions.append(new_decision)
-
-        try:
-            _atomic_write_json(
-                path,
-                {
-                    "pending": True,
-                    "decision": new_decision,
-                    "decisions": existing_decisions,
-                },
-            )
-            return True
-        except OSError:
-            return False
+                _atomic_write_json(
+                    path,
+                    {
+                        "pending": True,
+                        "decision": new_decision,
+                        "decisions": existing_decisions,
+                    },
+                )
+                return True
+            except OSError:
+                return False
 
     def _handle_get_pending_baseline(self, server_id: str) -> None:
         path = os.path.join(self.data_dir, server_id, "pending_baseline.json")

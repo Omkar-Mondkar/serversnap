@@ -452,6 +452,30 @@ class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
                                 store.approve(rep_basename, reason)
                     except Exception:
                         pass
+                elif success and category == "network":
+                    try:
+                        for candidate_dir in [
+                            os.path.normpath(os.path.join(self.directory, os.pardir, os.pardir, "Output")),
+                            os.path.normpath(os.path.join(self.directory, os.pardir, "Output")),
+                            os.path.normpath(os.path.join(self.directory, "Output")),
+                        ]:
+                            cand_file = os.path.join(candidate_dir, "network_diff.json")
+                            if os.path.isfile(cand_file):
+                                os.unlink(cand_file)
+                    except Exception:
+                        pass
+                elif success and category == "app":
+                    try:
+                        for candidate_dir in [
+                            os.path.normpath(os.path.join(self.directory, os.pardir, os.pardir, "Output")),
+                            os.path.normpath(os.path.join(self.directory, os.pardir, "Output")),
+                            os.path.normpath(os.path.join(self.directory, "Output")),
+                        ]:
+                            cand_file = os.path.join(candidate_dir, "app_diff.json")
+                            if os.path.isfile(cand_file):
+                                os.unlink(cand_file)
+                    except Exception:
+                        pass
             else:
                 success, message = handler.reject_changes(
                     category, user=user, reason=reason

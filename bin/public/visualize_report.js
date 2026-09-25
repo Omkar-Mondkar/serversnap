@@ -2773,7 +2773,7 @@
               decideCategoryBaseline(
                 "network",
                 "approve",
-                networkData,
+                getEffectiveNetworkData(),
                 user,
                 reason,
               );
@@ -2826,7 +2826,7 @@
               decideCategoryBaseline(
                 "network",
                 "approve",
-                networkData,
+                getEffectiveNetworkData(),
                 user,
                 reason,
               );
@@ -2981,13 +2981,18 @@
   }
 
 
+  function getEffectiveNetworkData() {
+    if (networkData && Object.keys(networkData).length > 0) return networkData;
+    var r = activeReportData();
+    if (r && r.network_data && Object.keys(r.network_data).length > 0) return r.network_data;
+    if (thresholdData && thresholdData.network_data) return thresholdData.network_data;
+    return networkData || {};
+  }
+
+
   function _mapCategoryStatus(cat, changeCount) {
     if (!changeCount || changeCount === 0) return "none";
-    if (!cat) return "pending";
-    var s = cat.status;
-    if (s === "no_changes") return "none";
-    if (s === "pending") return "pending";
-    if (s === "approved" || s === "rejected") return s;
+    if (cat && (cat.status === "approved" || cat.status === "rejected")) return cat.status;
     return "pending";
   }
 
@@ -3304,9 +3309,15 @@
         }
       }
 
-      // Settle category baselines across tabs if pending
-      if (approvalState.files === "pending") {
-        var entry = reports[selectedIndices[0]];
+      // Settle category baselines across tabs if pending or has changes
+      var desiredStatus = action === "approve" ? "approved" : "rejected";
+      var entry = reports[selectedIndices[0]];
+      var netDataToApprove = getEffectiveNetworkData();
+
+      if (
+        approvalState.files === "pending" ||
+        (fileChangeCount() > 0 && approvalState.files !== desiredStatus)
+      ) {
         decideCategoryBaseline(
           "drift",
           action,
@@ -3315,11 +3326,17 @@
           reason
         );
       }
-      if (approvalState.snapshot === "pending") {
+      if (
+        approvalState.snapshot === "pending" ||
+        (appChangeCount() > 0 && approvalState.snapshot !== desiredStatus)
+      ) {
         decideCategoryBaseline("app", action, appData || {}, user, reason);
       }
-      if (approvalState.network === "pending") {
-        decideCategoryBaseline("network", action, networkData || {}, user, reason);
+      if (
+        approvalState.network === "pending" ||
+        (netChangeCount() > 0 && approvalState.network !== desiredStatus)
+      ) {
+        decideCategoryBaseline("network", action, netDataToApprove, user, reason);
       }
 
       setTimeout(function () {
@@ -3338,7 +3355,7 @@
       category === "app"
         ? appData || {}
         : category === "network"
-          ? networkData || {}
+          ? getEffectiveNetworkData()
           : {};
     decideCategoryBaseline(category, action, snapshotData, user, reason);
     setTimeout(function () {

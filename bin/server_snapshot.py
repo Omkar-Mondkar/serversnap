@@ -1202,16 +1202,20 @@ def _pull_pending_baseline(config: Config, central_base_url: str, api_key: str) 
                         )
                     except Exception:
                         pass
-                    app_diff_file = os.path.join(root_dir, "Output", "app_diff.json")
-                    if os.path.isfile(app_diff_file):
-                        try:
-                            os.unlink(app_diff_file)
-                        except OSError:
-                            pass
+                    for candidate_out in [
+                        os.path.join(root_dir, "Output"),
+                        os.path.join(os.path.dirname(root_dir), "Output"),
+                    ]:
+                        app_diff_file = os.path.join(candidate_out, "app_diff.json")
+                        if os.path.isfile(app_diff_file):
+                            try:
+                                os.unlink(app_diff_file)
+                            except OSError:
+                                pass
 
             elif cat == "network":
                 net_data = decision.get("data") or decision.get("snapshot")
-                if isinstance(net_data, dict):
+                if isinstance(net_data, dict) and not (len(net_data) == 1 and "modified_settings" in net_data):
                     try:
                         os.makedirs(baselines_dir, exist_ok=True)
                         from baseline_manager import BaselineManager  # type: ignore
@@ -1233,14 +1237,16 @@ def _pull_pending_baseline(config: Config, central_base_url: str, api_key: str) 
                         )
                     except Exception:
                         pass
-                    net_diff_file = os.path.join(
-                        root_dir, "Output", "network_diff.json"
-                    )
-                    if os.path.isfile(net_diff_file):
-                        try:
-                            os.unlink(net_diff_file)
-                        except OSError:
-                            pass
+                    for candidate_out in [
+                        os.path.join(root_dir, "Output"),
+                        os.path.join(os.path.dirname(root_dir), "Output"),
+                    ]:
+                        net_diff_file = os.path.join(candidate_out, "network_diff.json")
+                        if os.path.isfile(net_diff_file):
+                            try:
+                                os.unlink(net_diff_file)
+                            except OSError:
+                                pass
 
         elif action == "REJECTED":
             try:

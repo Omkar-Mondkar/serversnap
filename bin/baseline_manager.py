@@ -162,7 +162,11 @@ class BaselineManager:
             return True, {"status": "no_baseline", "note": "First snapshot"}
 
         baseline_data = baseline.get("data", {})
-        if baseline_data == {"initialized": True} or not baseline_data:
+        if (
+            baseline_data == {"initialized": True}
+            or not baseline_data
+            or (category == "network" and isinstance(baseline_data, dict) and "modified_settings" in baseline_data and len(baseline_data) == 1)
+        ):
             if new_data:
                 self.save_baseline(category, new_data, reason="initial_baseline")
             return False, {"status": "no_changes"}

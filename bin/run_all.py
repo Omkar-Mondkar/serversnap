@@ -308,9 +308,26 @@ Examples:
     if not skip_network:
         print_header("STEP 3: Collecting Network Settings")
 
+        collect_py = script_dir / "collect_network_snapshot.py"
         collect_script = script_dir / "collect_network_snapshot.sh"
-        if collect_script.exists():
-            print_info("Running network snapshot collection...")
+        if collect_py.exists():
+            print_info("Running Python network snapshot collection...")
+            output_dir.mkdir(parents=True, exist_ok=True)
+            rc, out, err = run_command(f"python3 {collect_py} {output_dir}")
+            if rc != 0:
+                rc, out, err = run_command(f"{sys.executable} {collect_py} {output_dir}")
+
+            if rc == 0 and network_snapshot_yaml.exists():
+                print_success(f"Network snapshot collected: {network_snapshot_yaml}")
+            elif (project_root / "Output" / "config-snapshot.yaml").exists():
+                network_snapshot_yaml = project_root / "Output" / "config-snapshot.yaml"
+                print_success(f"Network snapshot collected: {network_snapshot_yaml}")
+            else:
+                print_info(
+                    "Network collection completed with no output"
+                )
+        elif collect_script.exists():
+            print_info("Running network snapshot collection (sh)...")
             output_dir.mkdir(parents=True, exist_ok=True)
             rc, out, err = run_command(f"bash {collect_script} {output_dir}")
 
@@ -380,8 +397,8 @@ Examples:
                             _pr_net.unlink()
                         except Exception:
                             pass
-            except Exception:
-                pass
+            except Exception as _net_err:
+                print_info(f"  (network baseline comparison note: {_net_err})")
     else:
         print_info(
             "Network snapshot not available - dashboard will show drift + app tabs only"
@@ -616,6 +633,11 @@ Examples:
                     },
                     "app_diff": _latest_rep.get("app_diff"),
                     "network_diff": _latest_rep.get("network_diff"),
+                    "network_data": (
+                        parse_network_settings(load_yaml_snapshot(str(network_snapshot_yaml)))
+                        if (network_snapshot_yaml.exists() and not skip_network)
+                        else {}
+                    ),
                     "snapshot": _latest_snap,
                 }
 
