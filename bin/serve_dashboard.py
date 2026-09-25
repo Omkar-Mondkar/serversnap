@@ -667,6 +667,7 @@ class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
                 snapshot_path,
                 user,
                 reason or f"Approved report {report_basename}",
+                target_type="report",
             )
             return True
         except Exception:  # noqa: BLE001 - approval state is already persisted

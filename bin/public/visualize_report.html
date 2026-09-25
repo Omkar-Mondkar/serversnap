@@ -727,6 +727,25 @@
             >
           </div>
         </div>
+        <div class="audit-filters-bar" id="auditFiltersBar">
+          <div class="audit-filters" role="tablist" aria-label="Filter audit history by category">
+            <button type="button" class="audit-filter-btn active" data-audit-filter="all" id="auditFilter-all">
+              All <span class="audit-filter-count" id="auditCount-all">0</span>
+            </button>
+            <button type="button" class="audit-filter-btn" data-audit-filter="report" id="auditFilter-report">
+              Summary <span class="audit-filter-count" id="auditCount-report">0</span>
+            </button>
+            <button type="button" class="audit-filter-btn" data-audit-filter="drift" id="auditFilter-drift">
+              File / Directory <span class="audit-filter-count" id="auditCount-drift">0</span>
+            </button>
+            <button type="button" class="audit-filter-btn" data-audit-filter="snapshot" id="auditFilter-snapshot">
+              Snapshot <span class="audit-filter-count" id="auditCount-snapshot">0</span>
+            </button>
+            <button type="button" class="audit-filter-btn" data-audit-filter="network" id="auditFilter-network">
+              Network <span class="audit-filter-count" id="auditCount-network">0</span>
+            </button>
+          </div>
+        </div>
         <section class="panel">
           <div id="auditPipelineList" class="audit-timeline"></div>
         </section>

@@ -1741,6 +1741,58 @@ main {
   font-size: 10px;
   text-align: center;
 } /* ── Audit pipeline timeline ──────────────────────────────────────────── */
+.audit-filters-bar {
+  margin-bottom: 14px;
+}
+.audit-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.audit-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 14px;
+  border: 1px solid var(--panel-b);
+  border-radius: 20px;
+  background: var(--bg-alt, #161b22);
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+}
+.audit-filter-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+.audit-filter-btn.active {
+  background: var(--panel-active, rgba(56, 139, 253, 0.15));
+  color: var(--accent, #58a6ff);
+  border-color: var(--accent, #58a6ff);
+  box-shadow: 0 0 8px rgba(88, 166, 255, 0.2);
+}
+.audit-filter-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 700;
+}
+.audit-filter-btn.active .audit-filter-count {
+  background: rgba(88, 166, 255, 0.25);
+  color: var(--accent, #58a6ff);
+}
 .audit-timeline .tl-item {
   display: flex;
   gap: 13px;
@@ -1786,6 +1838,28 @@ main {
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+.tl-item__kind--report {
+  background: rgba(88, 166, 255, 0.15);
+  color: #58a6ff;
+  border: 1px solid rgba(88, 166, 255, 0.28);
+}
+.tl-item__kind--drift,
+.tl-item__kind--files {
+  background: rgba(240, 136, 62, 0.15);
+  color: #f0883e;
+  border: 1px solid rgba(240, 136, 62, 0.28);
+}
+.tl-item__kind--snapshot,
+.tl-item__kind--app {
+  background: rgba(188, 140, 255, 0.15);
+  color: #bc8cff;
+  border: 1px solid rgba(188, 140, 255, 0.28);
+}
+.tl-item__kind--network {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.28);
 }
 .tl-item__target {
   font-family: var(--mono);

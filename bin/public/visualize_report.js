@@ -2257,9 +2257,6 @@
           var snapId = snapshotIdForReport(entry);
           var repBasename = currentReportBasename();
 
-          if (snapId) {
-            decideSnapshot("approve", snapId, { user: user, reason: reason, silent: true });
-          }
           if (repBasename) {
             window.approveReport(repBasename, { user: user, reason: reason });
           }
@@ -2289,9 +2286,6 @@
           var snapId = snapshotIdForReport(entry);
           var repBasename = currentReportBasename();
 
-          if (snapId) {
-            decideSnapshot("reject", snapId, { user: user, reason: reason, silent: true });
-          }
           if (repBasename) {
             window.rejectReport(repBasename, { user: user, reason: reason });
           }
@@ -3300,13 +3294,6 @@
         fn(basename, { reason: reason, user: user });
 
         var snapId = snapshotIdForReport(reports[selectedIndices[0]]);
-        if (snapId) {
-          decideSnapshot(action, snapId, {
-            user: user,
-            reason: reason,
-            silent: true,
-          });
-        }
       }
 
       // Settle category baselines across tabs if pending or has changes
@@ -3368,6 +3355,108 @@
   }
 
 
+  var _currentAuditFilter = "all";
+  var _cachedAuditHistory = [];
+
+  function getAuditCategory(rec) {
+    var t = (rec.target_type || "").toLowerCase();
+    if (t === "report") return "report";
+    if (t === "drift" || t === "files" || t === "file") return "drift";
+    if (t === "network") return "network";
+    if (t === "snapshot" || t === "app") return "snapshot";
+
+    var s = (rec.snapshot_id || "").toLowerCase();
+    if (s.indexOf("report_") === 0) return "report";
+    if (s === "drift") return "drift";
+    if (s === "network") return "network";
+    if (s === "app") return "snapshot";
+    return "snapshot";
+  }
+
+  function getAuditKindLabel(cat, rawKind) {
+    if (cat === "report") return "Summary";
+    if (cat === "drift") return "File / Dir";
+    if (cat === "network") return "Network";
+    if (cat === "snapshot") return "Snapshot";
+    return rawKind || "Snapshot";
+  }
+
+  function formatAuditTarget(cat, rawTarget) {
+    if (!rawTarget || rawTarget === "—") return "—";
+    if (cat === "drift" && rawTarget === "drift") return "File & Directory Baseline";
+    if (cat === "network" && rawTarget === "network") return "Network Baseline";
+    if (cat === "snapshot" && rawTarget === "app") return "Application Baseline";
+    return formatEntityName(rawTarget);
+  }
+
+  function renderAuditItems() {
+    var list = q("auditPipelineList");
+    if (!list) return;
+
+    var filtered = _cachedAuditHistory;
+    if (_currentAuditFilter !== "all") {
+      filtered = _cachedAuditHistory.filter(function (rec) {
+        return getAuditCategory(rec) === _currentAuditFilter;
+      });
+    }
+
+    if (!filtered.length) {
+      var filterNames = {
+        all: "approval",
+        report: "Summary",
+        drift: "File / Directory",
+        snapshot: "Snapshot",
+        network: "Network",
+      };
+      var name = filterNames[_currentAuditFilter] || _currentAuditFilter;
+      list.innerHTML =
+        '<div class="net-empty">No ' + esc(name) + ' decisions recorded yet.</div>';
+      return;
+    }
+
+    list.innerHTML = filtered
+      .map(function (rec) {
+        var approved =
+          (rec.action || "").toLowerCase().indexOf("approve") !== -1;
+        var cat = getAuditCategory(rec);
+        var kindLabel = getAuditKindLabel(cat, rec.target_type);
+        var targetDisplay = formatAuditTarget(cat, rec.snapshot_id);
+
+        return (
+          '<div class="tl-item">' +
+          '<span class="tl-item__node tl-item__node--' +
+          (approved ? "approved" : "rejected") +
+          '"></span>' +
+          '<div class="tl-item__body">' +
+          '<div class="tl-item__top">' +
+          '<span class="status-pill ' +
+          (approved ? "approved" : "rejected") +
+          '">' +
+          (approved ? "&#10003; Approved" : "&#10007; Rejected") +
+          "</span>" +
+          '<span class="tl-item__kind tl-item__kind--' +
+          cat +
+          '">' +
+          esc(kindLabel) +
+          "</span>" +
+          '<span class="tl-item__target">' +
+          esc(targetDisplay) +
+          "</span>" +
+          "</div>" +
+          '<div class="tl-item__meta">' +
+          esc(formatDate(rec.timestamp || "")) +
+          " · " +
+          esc(rec.user || "—") +
+          "</div>" +
+          (rec.reason
+            ? '<div class="tl-item__reason">' + esc(rec.reason) + "</div>"
+            : "") +
+          "</div></div>"
+        );
+      })
+      .join("");
+  }
+
   function renderAuditPipeline() {
     var list = q("auditPipelineList");
     if (!list) return;
@@ -3381,58 +3470,43 @@
         return r.json();
       })
       .then(function (d) {
-        var history = (d.history || []).slice().reverse();
+        _cachedAuditHistory = (d.history || []).slice().reverse();
+        var counts = { all: _cachedAuditHistory.length, report: 0, drift: 0, snapshot: 0, network: 0 };
+        _cachedAuditHistory.forEach(function (rec) {
+          var cat = getAuditCategory(rec);
+          if (counts[cat] !== undefined) counts[cat]++;
+        });
+
         var counter = q("auditCount");
         if (counter)
           counter.textContent =
-            history.length +
-            (history.length === 1 ? " decision" : " decisions");
-        if (!history.length) {
-          list.innerHTML =
-            '<div class="net-empty">No approval decisions recorded yet.</div>';
-          return;
-        }
-        list.innerHTML = history
-          .map(function (rec) {
-            var approved =
-              (rec.action || "").toLowerCase().indexOf("approve") !== -1;
-            return (
-              '<div class="tl-item">' +
-              '<span class="tl-item__node tl-item__node--' +
-              (approved ? "approved" : "rejected") +
-              '"></span>' +
-              '<div class="tl-item__body">' +
-              '<div class="tl-item__top">' +
-              '<span class="status-pill ' +
-              (approved ? "approved" : "rejected") +
-              '">' +
-              (approved ? "&#10003; Approved" : "&#10007; Rejected") +
-              "</span>" +
-              '<span class="tl-item__kind">' +
-              esc(rec.target_type || "snapshot") +
-              "</span>" +
-              '<span class="tl-item__target">' +
-              esc(rec.snapshot_id || "—") +
-              "</span>" +
-              "</div>" +
-              '<div class="tl-item__meta">' +
-              esc(formatDate(rec.timestamp || "")) +
-              " · " +
-              esc(rec.user || "—") +
-              "</div>" +
-              (rec.reason
-                ? '<div class="tl-item__reason">' + esc(rec.reason) + "</div>"
-                : "") +
-              "</div></div>"
-            );
-          })
-          .join("");
+            counts.all +
+            (counts.all === 1 ? " decision" : " decisions");
+
+        ["all", "report", "drift", "snapshot", "network"].forEach(function (key) {
+          var el = q("auditCount-" + key);
+          if (el) el.textContent = counts[key] || 0;
+        });
+
+        renderAuditItems();
       })
       .catch(function () {
         list.innerHTML =
           '<div class="net-empty">Audit history is unavailable.</div>';
       });
   }
+
+  document.addEventListener("click", function (e) {
+    var btn = e.target.closest(".audit-filter-btn");
+    if (!btn) return;
+    var filter = btn.dataset.auditFilter;
+    if (!filter) return;
+    _currentAuditFilter = filter;
+    document.querySelectorAll(".audit-filter-btn").forEach(function (b) {
+      b.classList.toggle("active", b.dataset.auditFilter === filter);
+    });
+    renderAuditItems();
+  });
 
 
   var APPROVER_KEY = "sssnap_approver";

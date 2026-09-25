@@ -494,6 +494,7 @@ def store_push(data_dir: str, server_id: str, payload: Dict[str, Any]) -> None:
             {
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "action": "APPROVED",
+                "target_type": "snapshot",
                 "snapshot_id": snap_id,
                 "user": "system (initial baseline)",
                 "reason": "Auto-approved initial baseline",

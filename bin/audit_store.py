@@ -43,10 +43,11 @@ class AuditStore:
             pass
         os.replace(temporary, self.baseline_path)
 
-    def append(self, action: str, snapshot_path: str, user: str, reason: str) -> None:
+    def append(self, action: str, snapshot_path: str, user: str, reason: str, target_type: str = "snapshot") -> None:
         record = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "action": action,
+            "target_type": target_type,
             "snapshot_id": Path(snapshot_path).name,
             "user": user,
             "reason": reason,
